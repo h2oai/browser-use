@@ -971,7 +971,7 @@ class BrowserContext:
 			logger.debug(f'Failed to input text into element: {repr(element_node)}. Error: {str(e)}')
 			raise BrowserError(f'Failed to input text into index {element_node.highlight_index}')
 
-	async def _click_element_node(self, element_node: DOMElementNode) -> Optional[str]:
+	async def _click_element_node(self, element_node: DOMElementNode, allow_download=False) -> Optional[str]:
 		"""
 		Optimized method to click an element using xpath.
 		"""
@@ -988,24 +988,52 @@ class BrowserContext:
 				raise Exception(f'Element: {repr(element_node)} not found')
 
 			async def perform_click(click_func):
-				"""Performs the actual click, handling both download
-				and navigation scenarios."""
-				if self.config.save_downloads_path:
+				"""Performs the actual click, handling both download and navigation scenarios."""
+				if self.config.save_downloads_path and allow_download:
 					try:
-						# Try short-timeout expect_download to detect a file download has been been triggered
+						# Try a normal click first
+						await click_func()
+						await page.wait_for_load_state()
+
+						# If it's a PDF that loaded in the browser
+						if page.url.lower().endswith('.pdf') or 'https://arxiv.org/pdf/' in page.url.lower() or 'http://arxiv.org/pdf/' in page.url.lower():
+							unique_filename = await self._get_unique_filename(
+								self.config.save_downloads_path,
+								os.path.basename(page.url)
+							)
+							if not unique_filename.endswith('.pdf'):
+								unique_filename += '.pdf'
+							download_path = os.path.join(self.config.save_downloads_path, unique_filename)
+							await page.pdf(path=download_path)
+							logger.debug(f'Saved embedded PDF to: {download_path}')
+							return download_path
+
+						# If not a PDF, try direct download handling
 						async with page.expect_download(timeout=5000) as download_info:
-							await click_func()
-						download = await download_info.value
-						# Determine file path
-						suggested_filename = download.suggested_filename
-						unique_filename = await self._get_unique_filename(self.config.save_downloads_path, suggested_filename)
-						download_path = os.path.join(self.config.save_downloads_path, unique_filename)
-						await download.save_as(download_path)
-						logger.debug(f'Download triggered. Saved file to: {download_path}')
-						return download_path
+							# Get a fresh element handle since page might have changed
+							new_element_handle = await self.get_locate_element(element_node)
+							if new_element_handle:
+								await new_element_handle.click(timeout=5000)
+							else:
+								logger.debug("Could not relocate element for download click")
+								return None
+
+							download = await download_info.value
+							suggested_filename = download.suggested_filename
+							unique_filename = await self._get_unique_filename(self.config.save_downloads_path, suggested_filename)
+							download_path = os.path.join(self.config.save_downloads_path, unique_filename)
+							await download.save_as(download_path)
+							logger.debug(f'Download triggered. Saved file to: {download_path}')
+							return download_path
+
 					except TimeoutError:
-						# If no download is triggered, treat as normal click
+						# If no download is triggered, continue with navigation
 						logger.debug('No download triggered within timeout. Checking navigation...')
+						await page.wait_for_load_state()
+						await self._check_and_handle_navigation(page)
+
+					except Exception as e:
+						logger.debug(f'Click handling error: {str(e)}. Proceeding with navigation check...')
 						await page.wait_for_load_state()
 						await self._check_and_handle_navigation(page)
 				else:
@@ -1018,7 +1046,7 @@ class BrowserContext:
 				return await perform_click(lambda: element_handle.click(timeout=1500))
 			except URLNotAllowedError as e:
 				raise e
-			except Exception:
+			except Exception as e:
 				try:
 					return await perform_click(lambda: page.evaluate('(el) => el.click()', element_handle))
 				except URLNotAllowedError as e:
