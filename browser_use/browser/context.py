@@ -991,12 +991,15 @@ class BrowserContext:
 				"""Performs the actual click, handling both download and navigation scenarios."""
 				if self.config.save_downloads_path and allow_download:
 					try:
-						# Try a normal click first
-						await click_func()
-						await page.wait_for_load_state()
-
+						# Get the URL from the element's href attribute
+						href = element_node.attributes.get('href', '')
+						# Handle relative URLs
+						if href.startswith('/'):
+							from urllib.parse import urlparse
+							parsed = urlparse(page.url)
+							href = f"{parsed.scheme}://{parsed.netloc}{href}"
 						# If it's a PDF that loaded in the browser
-						if page.url.lower().endswith('.pdf') or 'https://arxiv.org/pdf/' in page.url.lower() or 'http://arxiv.org/pdf/' in page.url.lower():
+						if href.lower().endswith('.pdf') or 'https://arxiv.org/pdf/' in href.lower() or 'http://arxiv.org/pdf/' in page.url.lower():
 							unique_filename = await self._get_unique_filename(
 								self.config.save_downloads_path,
 								os.path.basename(page.url)
@@ -1004,8 +1007,14 @@ class BrowserContext:
 							if not unique_filename.endswith('.pdf'):
 								unique_filename += '.pdf'
 							download_path = os.path.join(self.config.save_downloads_path, unique_filename)
-							await page.pdf(path=download_path)
-							logger.debug(f'Saved embedded PDF to: {download_path}')
+
+							# Download PDF directly from URL without rendering
+							response = await page.context.request.get(href)
+							content = await response.body()
+							with open(download_path, 'wb') as f:
+								f.write(content)
+							# await page.pdf(path=download_path)
+							logger.debug(f'Downloaded PDF directly to: {download_path}')
 							return download_path
 
 						# If not a PDF, try direct download handling
