@@ -83,7 +83,7 @@ class Controller:
 			return ActionResult(extracted_content=msg, include_in_memory=True)
 
 		# Element Interaction Actions
-		@self.registry.action('Click element', param_model=ClickElementAction)
+		@self.registry.action('Click element.  NOTE: Use download file URL element instead to download', param_model=ClickElementAction)
 		async def click_element(params: ClickElementAction, browser: BrowserContext):
 			session = await browser.get_session()
 			state = session.cached_state
