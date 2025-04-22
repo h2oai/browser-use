@@ -115,7 +115,7 @@ class Controller(Generic[Context]):
 			return ActionResult(extracted_content=msg, include_in_memory=True)
 
 		# Element Interaction Actions
-		@self.registry.action('Click element by index', param_model=ClickElementAction)
+		@self.registry.action('Click element by index.  NOTE: Use download file URL element instead to download.  Ctrl+S does not function for download.', param_model=ClickElementAction)
 		async def click_element_by_index(params: ClickElementAction, browser: BrowserContext):
 			session = await browser.get_session()
 

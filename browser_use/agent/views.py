@@ -112,6 +112,7 @@ class ActionResult(BaseModel):
 	extracted_content: Optional[str] = None
 	error: Optional[str] = None
 	include_in_memory: bool = False  # whether to include in past messages as context or not
+	screenshot: Optional[str] = None  # base64 encoded screenshot
 
 
 class StepMetadata(BaseModel):
