@@ -5,7 +5,7 @@ import traceback
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, Optional
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from openai import RateLimitError
