@@ -163,7 +163,7 @@ class DOMElementNode(DOMBaseNode):
 				if node.highlight_index is not None:
 					next_depth += 1
 
-					text = node.get_all_text_till_next_clickable_element()
+					text = node.get_all_text_till_next_clickable_element(max_depth=1)
 					attributes_html_str = ''
 					if include_attributes:
 						attributes_to_include = {
@@ -223,37 +223,12 @@ class DOMElementNode(DOMBaseNode):
 			elif isinstance(node, DOMTextNode):
 				# Add text only if it doesn't have a highlighted parent
 				if (
-					not node.has_parent_with_highlight_index()
-					and node.parent
-					and node.parent.is_visible
-					and node.parent.is_top_element
+					node.parent and node.parent.highlight_index is None and node.parent.is_visible and node.parent.is_top_element
 				):  # and node.is_parent_top_element()
 					formatted_text.append(f'{depth_str}{node.text}')
 
 		process_node(self, 0)
 		return '\n'.join(formatted_text)
-
-	def get_file_upload_element(self, check_siblings: bool = True) -> Optional['DOMElementNode']:
-		# Check if current element is a file input
-		if self.tag_name == 'input' and self.attributes.get('type') == 'file':
-			return self
-
-		# Check children
-		for child in self.children:
-			if isinstance(child, DOMElementNode):
-				result = child.get_file_upload_element(check_siblings=False)
-				if result:
-					return result
-
-		# Check siblings only for the initial call
-		if check_siblings and self.parent:
-			for sibling in self.parent.children:
-				if sibling is not self and isinstance(sibling, DOMElementNode):
-					result = sibling.get_file_upload_element(check_siblings=False)
-					if result:
-						return result
-
-		return None
 
 
 SelectorMap = dict[int, DOMElementNode]

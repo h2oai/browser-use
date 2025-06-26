@@ -6,15 +6,17 @@ Simple try of the agent.
 
 import asyncio
 import os
+import sys
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from dotenv import load_dotenv
-from langchain_openai import ChatOpenAI
-from pydantic import SecretStr
+
+load_dotenv()
+
 
 from browser_use import Agent
-
-# dotenv
-load_dotenv()
+from browser_use.llm import ChatOpenAI
 
 api_key = os.getenv('NOVITA_API_KEY', '')
 if not api_key:
@@ -32,7 +34,7 @@ async def run_search():
 		llm=ChatOpenAI(
 			base_url='https://api.novita.ai/v3/openai',
 			model='deepseek/deepseek-v3-0324',
-			api_key=SecretStr(api_key),
+			api_key=api_key,
 		),
 		use_vision=False,
 	)

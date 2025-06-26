@@ -1,23 +1,23 @@
+import argparse
+import asyncio
 import os
 import sys
 
-from langchain_anthropic import ChatAnthropic
-from langchain_openai import ChatOpenAI
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from browser_use.browser.context import BrowserContext, BrowserContextConfig
+from dotenv import load_dotenv
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import argparse
-import asyncio
+load_dotenv()
 
 from browser_use import Agent
-from browser_use.browser.browser import Browser, BrowserConfig
+from browser_use.browser import BrowserProfile, BrowserSession
 from browser_use.controller.service import Controller
+from browser_use.llm import ChatAnthropic, ChatOpenAI
 
 
 def get_llm(provider: str):
 	if provider == 'anthropic':
-		return ChatAnthropic(model_name='claude-3-5-sonnet-20240620', timeout=25, stop=None, temperature=0.0)
+		return ChatAnthropic(model='claude-3-5-sonnet-20240620', temperature=0.0)
 	elif provider == 'openai':
 		return ChatOpenAI(model='gpt-4o', temperature=0.0)
 
@@ -46,21 +46,18 @@ args = parser.parse_args()
 
 llm = get_llm(args.provider)
 
-
-browser = Browser(
-	config=BrowserConfig(
-		# browser_binary_path='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+browser_session = BrowserSession(
+	browser_profile=BrowserProfile(
+		user_agent='foobarfoo',
+		user_data_dir='~/.config/browseruse/profiles/default',
 	)
 )
-
-browser_context = BrowserContext(config=BrowserContextConfig(user_agent='foobarfoo'), browser=browser)
 
 agent = Agent(
 	task=args.query,
 	llm=llm,
 	controller=controller,
-	# browser=browser,
-	browser_context=browser_context,
+	browser_session=browser_session,
 	use_vision=True,
 	max_actions_per_step=1,
 )
@@ -70,7 +67,7 @@ async def main():
 	await agent.run(max_steps=25)
 
 	input('Press Enter to close the browser...')
-	await browser_context.close()
+	await browser_session.close()
 
 
 asyncio.run(main())

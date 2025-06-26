@@ -1,38 +1,35 @@
+import asyncio
 import os
 import sys
 from pprint import pprint
 
-from browser_use.browser.browser import Browser, BrowserConfig, BrowserContextConfig
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import asyncio
+from dotenv import load_dotenv
 
-from langchain_openai import ChatOpenAI
+load_dotenv()
 
 from browser_use import Agent
 from browser_use.agent.views import AgentHistoryList
+from browser_use.browser import BrowserProfile, BrowserSession
+from browser_use.llm import ChatOpenAI
 
 llm = ChatOpenAI(model='gpt-4o')
-browser = Browser(
-	config=BrowserConfig(
-		headless=False,
-		disable_security=True,
-	)
-)
 
 
 async def main():
-	async with await browser.new_context(
-		config=BrowserContextConfig(
-			trace_path='./tmp/result_processing',
-			no_viewport=False,
-			browser_window_size={'width': 1280, 'height': 1000},
+	async with BrowserSession(
+		browser_profile=BrowserProfile(
+			headless=False,
+			traces_dir='./tmp/result_processing',
+			window_size={'width': 1280, 'height': 1000},
+			user_data_dir='~/.config/browseruse/profiles/default',
 		)
-	) as browser_context:
+	) as browser_session:
 		agent = Agent(
 			task="go to google.com and type 'OpenAI' click search and give me the first url",
 			llm=llm,
-			browser_context=browser_context,
+			browser_session=browser_session,
 		)
 		history: AgentHistoryList = await agent.run(max_steps=3)
 
@@ -48,8 +45,6 @@ async def main():
 
 		print('\nThoughts:')
 		pprint(history.model_thoughts(), indent=4)
-	# close browser
-	await browser.close()
 
 
 if __name__ == '__main__':

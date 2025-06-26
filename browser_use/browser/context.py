@@ -13,7 +13,6 @@ import time
 import uuid
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
-
 import anyio
 from patchright._impl._errors import TimeoutError
 from patchright.async_api import Browser as PlaywrightBrowser

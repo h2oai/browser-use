@@ -2,19 +2,15 @@ from __future__ import annotations
 
 import json
 import traceback
-import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, Optional
 
-from langchain_core.language_models.chat_models import BaseChatModel
 from openai import RateLimitError
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, create_model
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, create_model, model_validator
+from uuid_extensions import uuid7str
 
 from browser_use.agent.message_manager.views import MessageManagerState
-from browser_use.agent.playwright_script_generator import PlaywrightScriptGenerator
-from browser_use.browser.browser import BrowserConfig
-from browser_use.browser.context import BrowserContextConfig
 from browser_use.browser.views import BrowserStateHistory
 from browser_use.controller.registry.views import ActionModel
 from browser_use.dom.history_tree_processor.service import (
@@ -23,30 +19,19 @@ from browser_use.dom.history_tree_processor.service import (
 	HistoryTreeProcessor,
 )
 from browser_use.dom.views import SelectorMap
-
-ToolCallingMethod = Literal['function_calling', 'json_mode', 'raw', 'auto', 'tools']
-REQUIRED_LLM_API_ENV_VARS = {
-	'ChatOpenAI': ['OPENAI_API_KEY'],
-	'AzureChatOpenAI': ['AZURE_OPENAI_ENDPOINT', 'AZURE_OPENAI_KEY'],
-	'ChatBedrockConverse': ['ANTHROPIC_API_KEY'],
-	'ChatAnthropic': ['ANTHROPIC_API_KEY'],
-	'ChatGoogleGenerativeAI': ['GEMINI_API_KEY'],
-	'ChatDeepSeek': ['DEEPSEEK_API_KEY'],
-	'ChatOllama': [],
-	'ChatGrok': ['GROK_API_KEY'],
-}
+from browser_use.filesystem.file_system import FileSystemState
+from browser_use.llm.base import BaseChatModel
 
 
 class AgentSettings(BaseModel):
-	"""Options for the agent"""
+	"""Configuration options for the Agent"""
 
 	use_vision: bool = True
 	use_vision_for_planner: bool = False
-	save_conversation_path: str | None = None
+	save_conversation_path: str | Path | None = None
 	save_conversation_path_encoding: str | None = 'utf-8'
 	max_failures: int = 3
 	retry_delay: int = 10
-	max_input_tokens: int = 128000
 	validate_output: bool = False
 	message_context: str | None = None
 	generate_gif: bool | str = False
@@ -66,31 +51,31 @@ class AgentSettings(BaseModel):
 		'aria-expanded',
 	]
 	max_actions_per_step: int = 10
+	use_thinking: bool = True
 
-	tool_calling_method: ToolCallingMethod | None = 'auto'
 	page_extraction_llm: BaseChatModel | None = None
 	planner_llm: BaseChatModel | None = None
 	planner_interval: int = 1  # Run planner every N steps
 	is_planner_reasoning: bool = False  # type: ignore
 	extend_planner_system_message: str | None = None
-
-	# Playwright script generation setting
-	save_playwright_script_path: str | None = None  # Path to save the generated Playwright script
+	calculate_cost: bool = False
 
 
 class AgentState(BaseModel):
 	"""Holds all state information for an Agent"""
 
-	agent_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+	agent_id: str = Field(default_factory=uuid7str)
 	n_steps: int = 1
 	consecutive_failures: int = 0
 	last_result: list[ActionResult] | None = None
 	history: AgentHistoryList = Field(default_factory=lambda: AgentHistoryList(history=[]))
 	last_plan: str | None = None
+	last_model_output: AgentOutput | None = None
 	paused: bool = False
 	stopped: bool = False
 
 	message_manager_state: MessageManagerState = Field(default_factory=MessageManagerState)
+	file_system_state: FileSystemState | None = None
 
 	# class Config:
 	# 	arbitrary_types_allowed = True
@@ -109,12 +94,38 @@ class AgentStepInfo:
 class ActionResult(BaseModel):
 	"""Result of executing an action"""
 
+	# For done action
 	is_done: bool | None = False
 	success: bool | None = None
-	extracted_content: str | None = None
+
+	# Error handling - always include in long term memory
 	error: str | None = None
-	include_in_memory: bool = False  # whether to include in past messages as context or not
+
+	# Files
+	attachments: list[str] | None = None  # Files to display in the done message
+
+	# Always include in long term memory
+	long_term_memory: str | None = None  # Memory of this action
+
+	# if update_only_read_state is True we add the extracted_content to the agent context only once for the next step
+	# if update_only_read_state is False we add the extracted_content to the agent long term memory if no long_term_memory is provided
+	extracted_content: str | None = None
+	include_extracted_content_only_once: bool = False  # Whether the extracted content should be used to update the read_state
+
+	# Deprecated
+	include_in_memory: bool = False  # whether to include in extracted_content inside long_term_memory
 	screenshot: Optional[str] = None  # base64 encoded screenshot
+
+	@model_validator(mode='after')
+	def validate_success_requires_done(self):
+		"""Ensure success=True can only be set when is_done=True"""
+		if self.success is True and self.is_done is not True:
+			raise ValueError(
+				'success=True can only be set when is_done=True. '
+				'For regular actions that succeed, leave success as None. '
+				'Use success=False only for actions that fail.'
+			)
+		return self
 
 
 class StepMetadata(BaseModel):
@@ -122,7 +133,6 @@ class StepMetadata(BaseModel):
 
 	step_start_time: float
 	step_end_time: float
-	input_tokens: int  # Approximate tokens from message manager for this step
 	step_number: int
 
 	@property
@@ -132,40 +142,71 @@ class StepMetadata(BaseModel):
 
 
 class AgentBrain(BaseModel):
-	"""Current state of the agent"""
-
+	thinking: str | None = None
 	evaluation_previous_goal: str
 	memory: str
 	next_goal: str
 
 
 class AgentOutput(BaseModel):
-	"""Output model for agent
+	model_config = ConfigDict(arbitrary_types_allowed=True, extra='forbid')
 
-	@dev note: this model is extended with custom actions in AgentService. You can also use some fields that are not in this model as provided by the linter, as long as they are registered in the DynamicActions model.
-	"""
-
-	model_config = ConfigDict(arbitrary_types_allowed=True)
-
-	current_state: AgentBrain
+	thinking: str | None = None
+	evaluation_previous_goal: str
+	memory: str
+	next_goal: str
 	action: list[ActionModel] = Field(
 		...,
 		description='List of actions to execute',
 		json_schema_extra={'min_items': 1},  # Ensure at least one action is provided
 	)
 
+	@property
+	def current_state(self) -> AgentBrain:
+		"""For backward compatibility - returns an AgentBrain with the flattened properties"""
+		return AgentBrain(
+			thinking=self.thinking,
+			evaluation_previous_goal=self.evaluation_previous_goal,
+			memory=self.memory,
+			next_goal=self.next_goal,
+		)
+
 	@staticmethod
 	def type_with_custom_actions(custom_actions: type[ActionModel]) -> type[AgentOutput]:
 		"""Extend actions with custom actions"""
+
 		model_ = create_model(
 			'AgentOutput',
 			__base__=AgentOutput,
 			action=(
-				list[custom_actions],
+				list[custom_actions],  # type: ignore
 				Field(..., description='List of actions to execute', json_schema_extra={'min_items': 1}),
 			),
 			__module__=AgentOutput.__module__,
 		)
+		model_.__doc__ = 'AgentOutput model with custom actions'
+		return model_
+
+	@staticmethod
+	def type_with_custom_actions_no_thinking(custom_actions: type[ActionModel]) -> type[AgentOutput]:
+		"""Extend actions with custom actions and exclude thinking field"""
+
+		# Create a base model without thinking, but inheriting from AgentOutput
+		# Override only the fields we need to change
+		model_ = create_model(
+			'AgentOutput',
+			__base__=AgentOutput,
+			thinking=(
+				type(None),  # type: ignore
+				Field(default=None, exclude=True),
+			),  # Exclude thinking from schema
+			action=(
+				list[custom_actions],  # type: ignore
+				Field(..., description='List of actions to execute', json_schema_extra={'min_items': 1}),
+			),
+			__module__=AgentOutput.__module__,
+		)
+
 		model_.__doc__ = 'AgentOutput model with custom actions'
 		return model_
 
@@ -200,9 +241,14 @@ class AgentHistory(BaseModel):
 		if self.model_output:
 			action_dump = [action.model_dump(exclude_none=True) for action in self.model_output.action]
 			model_output_dump = {
-				'current_state': self.model_output.current_state.model_dump(),
+				'evaluation_previous_goal': self.model_output.evaluation_previous_goal,
+				'memory': self.model_output.memory,
+				'next_goal': self.model_output.next_goal,
 				'action': action_dump,  # This preserves the actual action data
 			}
+			# Only include thinking if it's present
+			if self.model_output.thinking is not None:
+				model_output_dump['thinking'] = self.model_output.thinking
 
 		return {
 			'model_output': model_output_dump,
@@ -213,7 +259,7 @@ class AgentHistory(BaseModel):
 
 
 class AgentHistoryList(BaseModel):
-	"""List of agent history items"""
+	"""List of AgentHistory messages, i.e. the history of the agent's actions and thoughts."""
 
 	history: list[AgentHistory]
 
@@ -224,22 +270,6 @@ class AgentHistoryList(BaseModel):
 			if h.metadata:
 				total += h.metadata.duration_seconds
 		return total
-
-	def total_input_tokens(self) -> int:
-		"""
-		Get total tokens used across all steps.
-		Note: These are from the approximate token counting of the message manager.
-		For accurate token counting, use tools like LangChain Smith or OpenAI's token counters.
-		"""
-		total = 0
-		for h in self.history:
-			if h.metadata:
-				total += h.metadata.input_tokens
-		return total
-
-	def input_token_usage(self) -> list[int]:
-		"""Get token usage for each step"""
-		return [h.metadata.input_tokens for h in self.history if h.metadata]
 
 	def __str__(self) -> str:
 		"""Representation of the AgentHistoryList object"""
@@ -259,34 +289,37 @@ class AgentHistoryList(BaseModel):
 		except Exception as e:
 			raise e
 
-	def save_as_playwright_script(
-		self,
-		output_path: str | Path,
-		sensitive_data_keys: list[str] | None = None,
-		browser_config: BrowserConfig | None = None,
-		context_config: BrowserContextConfig | None = None,
-	) -> None:
-		"""
-		Generates a Playwright script based on the agent's history and saves it to a file.
-		Args:
-			output_path: The path where the generated Python script will be saved.
-			sensitive_data_keys: A list of keys used as placeholders for sensitive data
-								 (e.g., ['username_placeholder', 'password_placeholder']).
-								 These will be loaded from environment variables in the
-								 generated script.
-			browser_config: Configuration of the original Browser instance.
-			context_config: Configuration of the original BrowserContext instance.
-		"""
-		try:
-			serialized_history = self.model_dump()['history']
-			generator = PlaywrightScriptGenerator(serialized_history, sensitive_data_keys, browser_config, context_config)
-			script_content = generator.generate_script_content()
-			path_obj = Path(output_path)
-			path_obj.parent.mkdir(parents=True, exist_ok=True)
-			with open(path_obj, 'w', encoding='utf-8') as f:
-				f.write(script_content)
-		except Exception as e:
-			raise e
+	# def save_as_playwright_script(
+	# 	self,
+	# 	output_path: str | Path,
+	# 	sensitive_data_keys: list[str] | None = None,
+	# 	browser_config: BrowserConfig | None = None,
+	# 	context_config: BrowserContextConfig | None = None,
+	# ) -> None:
+	# 	"""
+	# 	Generates a Playwright script based on the agent's history and saves it to a file.
+	# 	Args:
+	# 		output_path: The path where the generated Python script will be saved.
+	# 		sensitive_data_keys: A list of keys used as placeholders for sensitive data
+	# 							 (e.g., ['username_placeholder', 'password_placeholder']).
+	# 							 These will be loaded from environment variables in the
+	# 							 generated script.
+	# 		browser_config: Configuration of the original Browser instance.
+	# 		context_config: Configuration of the original BrowserContext instance.
+	# 	"""
+	# 	from browser_use.agent.playwright_script_generator import PlaywrightScriptGenerator
+
+	# 	try:
+	# 		serialized_history = self.model_dump()['history']
+	# 		generator = PlaywrightScriptGenerator(serialized_history, sensitive_data_keys, browser_config, context_config)
+
+	# 		script_content = generator.generate_script_content()
+	# 		path_obj = Path(output_path)
+	# 		path_obj.parent.mkdir(parents=True, exist_ok=True)
+	# 		with open(path_obj, 'w', encoding='utf-8') as f:
+	# 			f.write(script_content)
+	# 	except Exception as e:
+	# 		raise e
 
 	def model_dump(self, **kwargs) -> dict[str, Any]:
 		"""Custom serialization that properly uses AgentHistory's model_dump"""

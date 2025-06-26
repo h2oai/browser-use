@@ -12,19 +12,19 @@ import os
 import sys
 from pathlib import Path
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from dotenv import load_dotenv
-from langchain_openai import AzureChatOpenAI
-from pydantic import BaseModel, SecretStr
-from PyPDF2 import PdfReader
+
+load_dotenv()
+
+from pydantic import BaseModel
+from PyPDF2 import PdfReader  # type: ignore
 
 from browser_use import ActionResult, Agent, Controller
-from browser_use.browser.browser import Browser, BrowserConfig
-from browser_use.browser.context import BrowserContext
+from browser_use.browser import BrowserProfile, BrowserSession
+from browser_use.llm import ChatAzureOpenAI
 
-# Validate required environment variables
-load_dotenv()
 required_env_vars = ['AZURE_OPENAI_KEY', 'AZURE_OPENAI_ENDPOINT']
 for var in required_env_vars:
 	if not os.getenv(var):
@@ -78,20 +78,15 @@ def read_cv():
 @controller.action(
 	'Upload cv to element - call this function to upload if element is not found, try with different index of the same upload element',
 )
-async def upload_cv(index: int, browser: BrowserContext):
+async def upload_cv(index: int, browser_session: BrowserSession):
 	path = str(CV.absolute())
-	dom_el = await browser.get_dom_element_by_index(index)
-
-	if dom_el is None:
-		return ActionResult(error=f'No element found at index {index}')
-
-	file_upload_dom_el = dom_el.get_file_upload_element()
+	file_upload_dom_el = await browser_session.find_file_upload_element_by_index(index)
 
 	if file_upload_dom_el is None:
 		logger.info(f'No file upload element found at index {index}')
 		return ActionResult(error=f'No file upload element found at index {index}')
 
-	file_upload_el = await browser.get_locate_element(file_upload_dom_el)
+	file_upload_el = await browser_session.get_locate_element(file_upload_dom_el)
 
 	if file_upload_el is None:
 		logger.info(f'No file upload element found at index {index}')
@@ -107,10 +102,11 @@ async def upload_cv(index: int, browser: BrowserContext):
 		return ActionResult(error=f'Failed to upload file to index {index}')
 
 
-browser = Browser(
-	config=BrowserConfig(
-		browser_binary_path='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+browser_session = BrowserSession(
+	browser_profile=BrowserProfile(
+		executable_path='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
 		disable_security=True,
+		user_data_dir='~/.config/browseruse/profiles/default',
 	)
 )
 
@@ -140,16 +136,13 @@ async def main():
 		# + 'go to https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite/job/Taiwan%2C-Remote/Fulfillment-Analyst---New-College-Graduate-2025_JR1988949/apply/autofillWithResume?workerSubType=0c40f6bd1d8f10adf6dae42e46d44a17&workerSubType=ab40a98049581037a3ada55b087049b7 NVIDIA',
 		# ground_task + '\n' + 'Meta',
 	]
-	model = AzureChatOpenAI(
+	model = ChatAzureOpenAI(
 		model='gpt-4o',
-		api_version='2024-10-21',
-		azure_endpoint=os.getenv('AZURE_OPENAI_ENDPOINT', ''),
-		api_key=SecretStr(os.getenv('AZURE_OPENAI_KEY', '')),
 	)
 
 	agents = []
 	for task in tasks:
-		agent = Agent(task=task, llm=model, controller=controller, browser=browser)
+		agent = Agent(task=task, llm=model, controller=controller, browser_session=browser_session)
 		agents.append(agent)
 
 	await asyncio.gather(*[agent.run() for agent in agents])

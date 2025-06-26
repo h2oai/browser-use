@@ -17,22 +17,18 @@ class TabInfo(BaseModel):
 	parent_page_id: int | None = None  # parent page that contains this popup or cross-origin iframe
 
 
-class GroupTabsAction(BaseModel):
-	tab_ids: list[int]
-	title: str
-	color: str | None = 'blue'
-
-
-class UngroupTabsAction(BaseModel):
-	tab_ids: list[int]
-
-
 @dataclass
-class BrowserState(DOMState):
+class BrowserStateSummary(DOMState):
+	"""The summary of the browser's current state designed for an LLM to process"""
+
+	# provided by DOMState:
+	# element_tree: DOMElementNode
+	# selector_map: SelectorMap
+
 	url: str
 	title: str
 	tabs: list[TabInfo]
-	screenshot: str | None = None
+	screenshot: str | None = field(default=None, repr=False)
 	pixels_above: int = 0
 	pixels_below: int = 0
 	browser_errors: list[str] = field(default_factory=list)
@@ -40,6 +36,8 @@ class BrowserState(DOMState):
 
 @dataclass
 class BrowserStateHistory:
+	"""The summary of the browser's state at a past point in time to usse in LLM message history"""
+
 	url: str
 	title: str
 	tabs: list[TabInfo]

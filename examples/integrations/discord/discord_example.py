@@ -33,32 +33,35 @@ Five Steps to create and invite a Discord bot:
 """
 
 import os
+import sys
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
 
 from dotenv import load_dotenv
-from langchain_google_genai import ChatGoogleGenerativeAI
-from pydantic import SecretStr
-
-from browser_use import BrowserConfig
-from examples.integrations.discord.discord_api import DiscordBot
 
 load_dotenv()
+
+
+from browser_use.browser import BrowserProfile
+from browser_use.llm import ChatGoogle
+from examples.integrations.discord.discord_api import DiscordBot
 
 # load credentials from environment variables
 bot_token = os.getenv('DISCORD_BOT_TOKEN')
 if not bot_token:
 	raise ValueError('Discord bot token not found in .env file.')
 
-api_key = os.getenv('GEMINI_API_KEY')
+api_key = os.getenv('GOOGLE_API_KEY')
 if not api_key:
-	raise ValueError('GEMINI_API_KEY is not set')
+	raise ValueError('GOOGLE_API_KEY is not set')
 
-llm = ChatGoogleGenerativeAI(model='gemini-2.0-flash-exp', api_key=SecretStr(api_key))
+llm = ChatGoogle(model='gemini-2.0-flash-exp', api_key=api_key)
 
 bot = DiscordBot(
 	llm=llm,  # required; instance of BaseChatModel
 	prefix='$bu',  # optional; prefix of messages to trigger browser-use, defaults to "$bu"
 	ack=True,  # optional; whether to acknowledge task receipt with a message, defaults to False
-	browser_config=BrowserConfig(
+	browser_profile=BrowserProfile(
 		headless=False
 	),  # optional; useful for changing headless mode or other browser configs, defaults to headless mode
 )
