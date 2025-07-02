@@ -1771,7 +1771,8 @@ class BrowserSession(BaseModel):
 				pass
 			temp_path.replace(cookies_file_path)
 
-			self.logger.info(f'🍪 Saved {len(cookies)} cookies to cookies_file= {_log_pretty_path(cookies_file_path)}')
+			if os.getenv('H2OGPT_BROWSER_VERBOSE'):
+				self.logger.info(f'🍪 Saved {len(cookies)} cookies to cookies_file= {_log_pretty_path(cookies_file_path)}')
 		except Exception as e:
 			self.logger.warning(
 				f'❌ Failed to save cookies to cookies_file= {_log_pretty_path(cookies_file_path)}: {type(e).__name__}: {e}'
@@ -1805,9 +1806,10 @@ class BrowserSession(BaseModel):
 				pass
 			temp_path.replace(json_path)
 
-			self.logger.info(
-				f'🍪 Saved {len(storage_state["cookies"]) + len(storage_state.get("origins", []))} cookies to storage_state= {_log_pretty_path(json_path)}'
-			)
+			if os.getenv('H2OGPT_BROWSER_VERBOSE'):
+				self.logger.info(
+					f'🍪 Saved {len(storage_state["cookies"]) + len(storage_state.get("origins", []))} cookies to storage_state= {_log_pretty_path(json_path)}'
+				)
 		except Exception as e:
 			self.logger.warning(f'❌ Failed to save cookies to storage_state= {_log_pretty_path(path)}: {type(e).__name__}: {e}')
 
