@@ -549,7 +549,8 @@ class Agent(Generic[Context]):
 		# Save file system state to agent state
 		self.state.file_system_state = self.file_system.get_state()
 
-		logger.info(f'💾 File system path: {self.file_system_path}')
+		if os.getenv('H2OGPT_BROWSER_VERBOSE'):
+			logger.info(f'💾 File system path: {self.file_system_path}')
 
 	def save_file_system_state(self) -> None:
 		"""Save current file system state to agent state"""

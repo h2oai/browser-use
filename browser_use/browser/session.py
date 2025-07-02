@@ -1848,11 +1848,12 @@ class BrowserSession(BaseModel):
 			await self._save_cookies_to_file(self.browser_profile.cookies_file, cookies)
 			new_path = self.browser_profile.cookies_file.parent / 'storage_state.json'
 			await self._save_storage_state_to_file(new_path, storage_state)
-			self.logger.warning(
-				'⚠️ cookies_file is deprecated and will be removed in a future version. '
-				f'Please use storage_state="{_log_pretty_path(new_path)}" instead for persisting cookies and other browser state. '
-				'See: https://playwright.dev/python/docs/api/class-browsercontext#browser-context-storage-state'
-			)
+			if os.getenv('H2OGPT_BROWSER_VERBOSE'):
+				self.logger.warning(
+					'⚠️ cookies_file is deprecated and will be removed in a future version. '
+					f'Please use storage_state="{_log_pretty_path(new_path)}" instead for persisting cookies and other browser state. '
+					'See: https://playwright.dev/python/docs/api/class-browsercontext#browser-context-storage-state'
+				)
 
 		if self.browser_profile.storage_state is None:
 			return
@@ -1883,11 +1884,12 @@ class BrowserSession(BaseModel):
 
 		if self.browser_profile.cookies_file:
 			# Show deprecation warning
-			self.logger.warning(
-				'⚠️ cookies_file is deprecated and will be removed in a future version. '
-				'Please use storage_state instead for loading cookies and other browser state. '
-				'See: https://playwright.dev/python/docs/api/class-browsercontext#browser-context-storage-state'
-			)
+			if os.getenv('H2OGPT_BROWSER_VERBOSE'):
+				self.logger.warning(
+					'⚠️ cookies_file is deprecated and will be removed in a future version. '
+					'Please use storage_state instead for loading cookies and other browser state. '
+					'See: https://playwright.dev/python/docs/api/class-browsercontext#browser-context-storage-state'
+				)
 
 			cookies_path = Path(self.browser_profile.cookies_file).expanduser()
 			if not cookies_path.is_absolute():
@@ -1897,7 +1899,8 @@ class BrowserSession(BaseModel):
 				cookies_data = json.loads(cookies_path.read_text())
 				if cookies_data:
 					await self.browser_context.add_cookies(cookies_data)
-					self.logger.info(f'🍪 Loaded {len(cookies_data)} cookies from cookies_file= {_log_pretty_path(cookies_path)}')
+					if os.getenv('H2OGPT_BROWSER_VERBOSE'):
+						self.logger.info(f'🍪 Loaded {len(cookies_data)} cookies from cookies_file= {_log_pretty_path(cookies_path)}')
 			except Exception as e:
 				self.logger.warning(
 					f'❌ Failed to load cookies from cookies_file= {_log_pretty_path(cookies_path)}: {type(e).__name__}: {e}'
