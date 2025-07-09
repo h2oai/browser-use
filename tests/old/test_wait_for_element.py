@@ -21,7 +21,7 @@ from browser_use.browser import BrowserProfile, BrowserSession
 load_dotenv()
 
 # Initialize language model and controller.
-llm = ChatOpenAI(model='gpt-4o')
+llm = ChatOpenAI(model='gpt-4.1')
 controller = Controller()
 
 
@@ -30,7 +30,7 @@ async def test_wait_for_element():
 	"""Test 'Wait for element' action."""
 
 	initial_actions = [
-		{'open_tab': {'url': 'https://pypi.org/'}},
+		{'go_to_url': {'url': 'https://pypi.org/', 'new_tab': True}},
 		# Uncomment the line below to include the wait action in initial actions.
 		# {'wait_for_element': {'selector': '#search', 'timeout': 30}},
 	]

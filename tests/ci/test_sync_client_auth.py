@@ -146,6 +146,7 @@ class TestDeviceAuthClient:
 		body = request.get_data(as_text=True)
 		assert 'client_id=library' in body
 		assert 'agent_session_id=test-session-id' in body
+		assert 'device_id=' in body  # Should include device_id
 
 	async def test_poll_for_token_pending(self, httpserver: HTTPServer, http_client, temp_config_dir):
 		"""Test polling when authorization is pending."""
@@ -365,6 +366,7 @@ class TestCloudSync:
 				user_feedback_type=None,
 				user_comment=None,
 				gif_url=None,
+				device_id='test-device-id',
 			)
 		)
 
@@ -419,6 +421,7 @@ class TestCloudSync:
 				user_feedback_type=None,
 				user_comment=None,
 				gif_url=None,
+				device_id='test-device-id',
 			)
 		)
 
@@ -480,6 +483,7 @@ class TestCloudSync:
 				user_feedback_type=None,
 				user_comment=None,
 				gif_url=None,
+				device_id='test-device-id',
 			)
 		)
 
@@ -534,6 +538,7 @@ class TestCloudSync:
 				user_feedback_type=None,
 				user_comment=None,
 				gif_url=None,
+				device_id='test-device-id',
 			)
 		)
 
@@ -678,6 +683,7 @@ class TestIntegration:
 				browser_session_id='test-browser-session',
 				browser_session_live_url='http://example.com/live',
 				browser_session_cdp_url='ws://example.com/cdp',
+				device_id='test-device-id',
 			)
 		)
 
@@ -700,6 +706,7 @@ class TestIntegration:
 				user_feedback_type=None,
 				user_comment=None,
 				gif_url=None,
+				device_id='test-device-id',
 			)
 		)
 
@@ -773,6 +780,7 @@ class TestAuthResilience:
 				user_feedback_type=None,
 				user_comment=None,
 				gif_url=None,
+				device_id='test-device-id',
 			)
 		)
 
@@ -816,6 +824,7 @@ class TestAuthResilience:
 				user_feedback_type=None,
 				user_comment=None,
 				gif_url=None,
+				device_id='test-device-id',
 			)
 		)
 
@@ -846,6 +855,7 @@ class TestAuthResilience:
 				user_feedback_type=None,
 				user_comment=None,
 				gif_url=None,
+				device_id='test-device-id',
 			)
 		)
 
@@ -870,6 +880,7 @@ class TestAuthResilience:
 					user_feedback_type=None,
 					user_comment=None,
 					gif_url=None,
+					device_id='test-device-id',
 				)
 			)
 
@@ -914,5 +925,6 @@ class TestAuthResilience:
 				user_feedback_type=None,
 				user_comment=None,
 				gif_url=None,
+				device_id='test-device-id',
 			)
 		)

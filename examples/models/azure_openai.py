@@ -27,7 +27,7 @@ if not azure_openai_api_key or not azure_openai_endpoint:
 
 # Initialize the Azure OpenAI client
 llm = ChatAzureOpenAI(
-	model='gpt-4o',
+	model='gpt-4.1',
 	api_key=azure_openai_api_key,
 	azure_endpoint=azure_openai_endpoint,  # Corrected to use azure_endpoint instead of openai_api_base
 )
@@ -35,7 +35,6 @@ llm = ChatAzureOpenAI(
 agent = Agent(
 	task='Go to amazon.com, search for laptop, sort by best rating, and give me the price of the first result',
 	llm=llm,
-	enable_memory=True,
 )
 
 

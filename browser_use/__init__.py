@@ -1,6 +1,14 @@
+import os
+
 from browser_use.logging_config import setup_logging
 
-logger = setup_logging()
+# Only set up logging if not in MCP mode or if explicitly requested
+if os.environ.get('BROWSER_USE_SETUP_LOGGING', 'true').lower() != 'false':
+	logger = setup_logging()
+else:
+	import logging
+
+	logger = logging.getLogger('browser_use')
 
 # Monkeypatch BaseSubprocessTransport.__del__ to handle closed event loops gracefully
 from asyncio import base_subprocess
@@ -11,6 +19,14 @@ from browser_use.agent.views import ActionModel, ActionResult, AgentHistoryList
 from browser_use.browser import Browser, BrowserConfig, BrowserContext, BrowserContextConfig, BrowserProfile, BrowserSession
 from browser_use.controller.service import Controller
 from browser_use.dom.service import DomService
+from browser_use.llm import (
+	ChatAnthropic,
+	ChatAzureOpenAI,
+	ChatGoogle,
+	ChatGroq,
+	ChatOllama,
+	ChatOpenAI,
+)
 
 _original_del = base_subprocess.BaseSubprocessTransport.__del__
 
@@ -48,4 +64,11 @@ __all__ = [
 	'AgentHistoryList',
 	'BrowserContext',
 	'BrowserContextConfig',
+	# Chat models
+	'ChatOpenAI',
+	'ChatGoogle',
+	'ChatAnthropic',
+	'ChatGroq',
+	'ChatAzureOpenAI',
+	'ChatOllama',
 ]

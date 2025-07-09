@@ -4,10 +4,11 @@ import json
 import traceback
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal, Optional
+from typing import Any, Generic, Literal, Optional
 
 from openai import RateLimitError
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, create_model, model_validator
+from typing_extensions import TypeVar
 from uuid_extensions import uuid7str
 
 from browser_use.agent.message_manager.views import MessageManagerState
@@ -21,6 +22,7 @@ from browser_use.dom.history_tree_processor.service import (
 from browser_use.dom.views import SelectorMap
 from browser_use.filesystem.file_system import FileSystemState
 from browser_use.llm.base import BaseChatModel
+from browser_use.tokens.views import UsageSummary
 
 
 class AgentSettings(BaseModel):
@@ -52,6 +54,8 @@ class AgentSettings(BaseModel):
 	]
 	max_actions_per_step: int = 10
 	use_thinking: bool = True
+	max_history_items: int = 40
+	images_per_step: int = 1
 
 	page_extraction_llm: BaseChatModel | None = None
 	planner_llm: BaseChatModel | None = None
@@ -59,6 +63,7 @@ class AgentSettings(BaseModel):
 	is_planner_reasoning: bool = False  # type: ignore
 	extend_planner_system_message: str | None = None
 	calculate_cost: bool = False
+	include_tool_call_examples: bool = False
 
 
 class AgentState(BaseModel):
@@ -68,7 +73,7 @@ class AgentState(BaseModel):
 	n_steps: int = 1
 	consecutive_failures: int = 0
 	last_result: list[ActionResult] | None = None
-	history: AgentHistoryList = Field(default_factory=lambda: AgentHistoryList(history=[]))
+	history: AgentHistoryList = Field(default_factory=lambda: AgentHistoryList(history=[], usage=None))
 	last_plan: str | None = None
 	last_model_output: AgentOutput | None = None
 	paused: bool = False
@@ -191,24 +196,25 @@ class AgentOutput(BaseModel):
 	def type_with_custom_actions_no_thinking(custom_actions: type[ActionModel]) -> type[AgentOutput]:
 		"""Extend actions with custom actions and exclude thinking field"""
 
-		# Create a base model without thinking, but inheriting from AgentOutput
-		# Override only the fields we need to change
-		model_ = create_model(
+		class AgentOutputNoThinking(AgentOutput):
+			@classmethod
+			def model_json_schema(cls, **kwargs):
+				schema = super().model_json_schema(**kwargs)
+				del schema['properties']['thinking']
+				return schema
+
+		model = create_model(
 			'AgentOutput',
-			__base__=AgentOutput,
-			thinking=(
-				type(None),  # type: ignore
-				Field(default=None, exclude=True),
-			),  # Exclude thinking from schema
+			__base__=AgentOutputNoThinking,
 			action=(
 				list[custom_actions],  # type: ignore
 				Field(..., description='List of actions to execute', json_schema_extra={'min_items': 1}),
 			),
-			__module__=AgentOutput.__module__,
+			__module__=AgentOutputNoThinking.__module__,
 		)
 
-		model_.__doc__ = 'AgentOutput model with custom actions'
-		return model_
+		model.__doc__ = 'AgentOutput model with custom actions'
+		return model
 
 
 class AgentHistory(BaseModel):
@@ -258,10 +264,16 @@ class AgentHistory(BaseModel):
 		}
 
 
-class AgentHistoryList(BaseModel):
+AgentStructuredOutput = TypeVar('AgentStructuredOutput', bound=BaseModel)
+
+
+class AgentHistoryList(BaseModel, Generic[AgentStructuredOutput]):
 	"""List of AgentHistory messages, i.e. the history of the agent's actions and thoughts."""
 
 	history: list[AgentHistory]
+	usage: UsageSummary | None = None
+
+	_output_model_schema: type[AgentStructuredOutput] | None = None
 
 	def total_duration_seconds(self) -> float:
 		"""Get total duration of all steps in seconds"""
@@ -270,6 +282,10 @@ class AgentHistoryList(BaseModel):
 			if h.metadata:
 				total += h.metadata.duration_seconds
 		return total
+
+	def __len__(self) -> int:
+		"""Return the number of history items"""
+		return len(self.history)
 
 	def __str__(self) -> str:
 		"""Representation of the AgentHistoryList object"""
@@ -389,9 +405,20 @@ class AgentHistoryList(BaseModel):
 		"""Get all unique URLs from history"""
 		return [h.state.url if h.state.url is not None else None for h in self.history]
 
-	def screenshots(self) -> list[str | None]:
+	def screenshots(self, n_last: int | None = None, return_none_if_not_screenshot: bool = True) -> list[str | None]:
 		"""Get all screenshots from history"""
-		return [h.state.screenshot if h.state.screenshot is not None else None for h in self.history]
+		if n_last == 0:
+			return []
+		if n_last is None:
+			if return_none_if_not_screenshot:
+				return [h.state.screenshot if h.state.screenshot is not None else None for h in self.history]
+			else:
+				return [h.state.screenshot for h in self.history if h.state.screenshot is not None]
+		else:
+			if return_none_if_not_screenshot:
+				return [h.state.screenshot if h.state.screenshot is not None else None for h in self.history[-n_last:]]
+			else:
+				return [h.state.screenshot for h in self.history[-n_last:] if h.state.screenshot is not None]
 
 	def action_names(self) -> list[str]:
 		"""Get all action names from history"""
@@ -452,6 +479,20 @@ class AgentHistoryList(BaseModel):
 	def number_of_steps(self) -> int:
 		"""Get the number of steps in the history"""
 		return len(self.history)
+
+	@property
+	def structured_output(self) -> AgentStructuredOutput | None:
+		"""Get the structured output from the history
+
+		Returns:
+			The structured output if both final_result and _output_model_schema are available,
+			otherwise None
+		"""
+		final_result = self.final_result()
+		if final_result is not None and self._output_model_schema is not None:
+			return self._output_model_schema.model_validate_json(final_result)
+
+		return None
 
 
 class AgentError:

@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from typing import Literal, TypeVar, overload
 
 from groq import (
-	DEFAULT_MAX_RETRIES,
 	APIError,
 	APIResponseValidationError,
 	APIStatusError,
@@ -47,12 +46,13 @@ class ChatGroq(BaseChatModel):
 
 	# Model params
 	temperature: float | None = None
+	service_tier: Literal['auto', 'on_demand', 'flex'] | None = None
 
 	# Client initialization parameters
 	api_key: str | None = None
 	base_url: str | URL | None = None
 	timeout: float | Timeout | NotGiven | None = None
-	max_retries: int = DEFAULT_MAX_RETRIES
+	max_retries: int = 10  # Increase default retries for automation reliability
 
 	def get_client(self) -> AsyncGroq:
 		return AsyncGroq(api_key=self.api_key, base_url=self.base_url, timeout=self.timeout, max_retries=self.max_retries)
@@ -97,6 +97,7 @@ class ChatGroq(BaseChatModel):
 					messages=groq_messages,
 					model=self.model,
 					temperature=self.temperature,
+					service_tier=self.service_tier,
 				)
 				usage = self._get_usage(chat_completion)
 				return ChatInvokeCompletion(
@@ -106,7 +107,6 @@ class ChatGroq(BaseChatModel):
 
 			else:
 				schema = output_format.model_json_schema()
-				schema['additionalProperties'] = False
 
 				# Return structured response
 				response = await self.get_client().chat.completions.create(
@@ -121,6 +121,7 @@ class ChatGroq(BaseChatModel):
 						),
 						type='json_schema',
 					),
+					service_tier=self.service_tier,
 				)
 
 				if not response.choices[0].message.content:

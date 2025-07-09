@@ -99,6 +99,11 @@ class TestAgentEventLifecycle:
 	async def test_agent_with_gif_generation(self, mock_llm, browser_session, cloud_sync, event_collector, httpserver):
 		"""Test that GIF generation triggers CreateAgentOutputFileEvent"""
 
+		# Setup cloud sync endpoint
+		httpserver.expect_request('/api/v1/events', method='POST').respond_with_json(
+			{'processed': 1, 'failed': 0, 'results': [{'success': True}]}
+		)
+
 		# Setup a test page
 		httpserver.expect_request('/').respond_with_data('<html><body><h1>GIF Test</h1></body></html>', content_type='text/html')
 		await browser_session.navigate(httpserver.url_for('/'))
@@ -392,17 +397,19 @@ class TestEventValidation:
 				browser_session_id='test-browser',
 				browser_session_live_url='https://example.com',
 				browser_session_cdp_url='ws://localhost:9222',
+				device_id='test-device-id',
 			),
 			CreateAgentTaskEvent(
 				id='0683fb03-c5da-79c9-8000-d3a39c47c652',
 				user_id='0683fb03-c5da-79c9-8000-d3a39c47c650',
 				agent_session_id='0683fb03-c5da-79c9-8000-d3a39c47c651',
 				task='test',
-				llm_model='gpt-4o',
+				llm_model='gpt-4.1',
 				done_output=None,
 				user_feedback_type=None,
 				user_comment=None,
 				gif_url=None,
+				device_id='test-device-id',
 			),
 			CreateAgentStepEvent(
 				user_id='0683fb03-c5da-79c9-8000-d3a39c47c650',
@@ -413,6 +420,7 @@ class TestEventValidation:
 				next_goal='next',
 				actions=[],
 				screenshot_url='data:image/png;...',
+				device_id='test-device-id',
 			),
 		]
 
@@ -445,6 +453,7 @@ class TestEventValidation:
 				user_feedback_type=None,
 				user_comment=None,
 				gif_url=None,
+				device_id='test-device-id',
 			)
 
 	def test_event_type_assignment(self):
@@ -458,6 +467,7 @@ class TestEventValidation:
 			user_feedback_type=None,
 			user_comment=None,
 			gif_url=None,
+			device_id='test-device-id',
 		)
 
 		# Event type should be automatically set

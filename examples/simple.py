@@ -19,7 +19,7 @@ llm = ChatOpenAI(
 )
 
 
-task = 'Go to google.com/travel/flights and find the cheapest one-way flight from Zurich to San Francisco in 3 weeks.'
+task = 'Find the founders of browser-use'
 agent = Agent(task=task, llm=llm)
 
 
