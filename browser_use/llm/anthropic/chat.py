@@ -38,6 +38,7 @@ class ChatAnthropic(BaseChatModel):
 	model: str | ModelParam
 	max_tokens: int = 8192
 	temperature: float | None = None
+	thinking: dict | None = None
 
 	# Client initialization parameters
 	api_key: str | None = None
@@ -84,6 +85,9 @@ class ChatAnthropic(BaseChatModel):
 
 		if self.max_tokens is not None:
 			client_params['max_tokens'] = self.max_tokens
+
+		if self.thinking is not None:
+			client_params['thinking'] = self.thinking
 
 		return client_params
 
