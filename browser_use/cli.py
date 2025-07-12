@@ -871,7 +871,7 @@ class BrowserUseApp(App):
 
 			# Try to extract tasks by looking at message history
 			if hasattr(self.agent, '_message_manager') and self.agent._message_manager:
-				message_history = self.agent._message_manager.state.history.messages
+				message_history = self.agent._message_manager.state.history.get_messages()
 
 				# Extract original task(s)
 				original_tasks = []

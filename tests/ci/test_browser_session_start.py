@@ -816,7 +816,7 @@ class TestBrowserSessionReusePatterns:
 			# Set up httpserver and navigate to a page before running agents
 			httpserver.expect_request('/').respond_with_data('<html><body>Test page</body></html>')
 			page = await shared_browser.get_current_page()
-			await page.goto(httpserver.url_for('/'), wait_until='domcontentloaded')
+			await page.goto(httpserver.url_for('/'), wait_until='domcontentloaded', timeout=3000)
 
 			# Run agents in parallel (may interfere with each other)
 			_results = await asyncio.gather(agent1.run(), agent2.run(), return_exceptions=True)

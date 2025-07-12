@@ -60,7 +60,12 @@ async def check_login_cookie_at_step(browser_session, task_id: str, login_cookie
 					}
 					return True
 
+		# Enhanced logging when cookie not found
 		logger.debug(f'Task {task_id} Step {step}: Login cookie "{search_target}" not found in {len(current_cookies)} cookies')
+		logger.debug(
+			f'Task {task_id} Step {step}: Available cookies: {[cookie.get("name", "unnamed") for cookie in current_cookies]}'
+		)
+
 		return False
 
 	except Exception as e:
@@ -209,6 +214,11 @@ async def evaluate_task_with_login_cookie(login_cookie: str, task_folder: Path) 
 				matching_cookie_info = f"substring match in name='{cookie_name}'"
 				logger.debug(f'Login cookie found with substring match: {matching_cookie_info}')
 				break
+
+	# Enhanced logging when cookie not found in end-state
+	if not login_cookie_found:
+		logger.debug(f'Task {task_id}: Cookie "{search_target}" not found in end-state cookies')
+		logger.debug(f'Task {task_id}: Available end-state cookies: {[cookie.get("name", "unnamed") for cookie in cookies_data]}')
 
 	# Prepare evaluation result
 	if login_cookie_found:

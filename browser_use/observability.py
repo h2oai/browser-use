@@ -31,17 +31,13 @@ F = TypeVar('F', bound=Callable[..., Any])
 def _is_debug_mode() -> bool:
 	"""Check if we're in debug mode based on environment variables or logging level."""
 
-	browser_use_debug = os.getenv('BROWSER_USE_LOGGING_LEVEL', '').lower()
-	if browser_use_debug == 'debug':
+	lmnr_debug_mode = os.getenv('LMNR_LOGGING_LEVEL', '').lower()
+	if lmnr_debug_mode == 'debug':
 		# logger.info('Debug mode is enabled for observability')
 		return True
 	# logger.info('Debug mode is disabled for observability')
 	return False
 
-
-# Only log debug mode status if explicitly requested
-if os.environ.get('BROWSER_USE_VERBOSE_OBSERVABILITY', 'false').lower() == 'true':
-	logger.info(f'Debug mode is {_is_debug_mode()}')
 
 # Try to import lmnr observe
 _LMNR_AVAILABLE = False

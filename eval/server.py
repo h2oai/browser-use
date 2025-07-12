@@ -152,7 +152,7 @@ def format_auth_info_for_agent(auth_distribution: dict, auth_keys: list[str]) ->
 			logger.warning(f"Auth key '{auth_key}' not found in available login info. Available keys: {list(login_info.keys())}")
 
 	if relevant_auths:
-		auth_text = f'\n\nThe following login credentials can be used to complete this task: {"; ".join(relevant_auths)}.'
+		auth_text = f"\n\nOnly log into the account if it's required to complete the task. Do not log in otherwise.\n The following login credentials can be used to complete this task: {'; '.join(relevant_auths)}\nIf you need a verification code or OTP that is sent to your email, you can use the get_recent_emails action to get your latest emails."
 		logger.info(f'Formatted auth info: {auth_text}')
 		return auth_text
 	else:

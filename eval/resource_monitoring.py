@@ -9,6 +9,8 @@ from typing import Any
 
 import psutil
 
+from browser_use.observability import observe_debug
+
 # Module logger
 logger = logging.getLogger(__name__)
 
@@ -18,6 +20,7 @@ _resource_monitor_stop_event = None
 _graceful_shutdown_initiated = False
 
 
+@observe_debug()
 def get_system_resources() -> dict[str, Any]:
 	"""Get current system resource usage"""
 	try:
@@ -78,6 +81,7 @@ def get_system_resources() -> dict[str, Any]:
 		}
 
 
+@observe_debug()
 def log_system_resources(context: str = ''):
 	"""Log current system resource usage"""
 	resources = get_system_resources()

@@ -629,6 +629,9 @@ async def evaluate_task_result(
 		judge_result['success'] = cookie_result['success']
 		judge_result['error'] = cookie_result['error']
 
+		# IMPORTANT: Also populate the WebJudge fields so Section 4 appears in the UI
+		judge_result['judgement'] = cookie_result['judgement']
+
 		# Also overwrite comprehensive judge evaluation if it exists
 		if 'comprehensive_evaluation' in judge_result and judge_result['comprehensive_evaluation']:
 			judge_result['comprehensive_evaluation']['passed'] = cookie_result['success']

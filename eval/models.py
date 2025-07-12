@@ -94,6 +94,13 @@ SUPPORTED_MODELS = {
 	'gpt-4o': {'provider': 'openai', 'model_name': 'gpt-4o', 'api_key_env': 'OPENAI_API_KEY'},
 	'gpt-4o-mini': {'provider': 'openai', 'model_name': 'gpt-4o-mini', 'api_key_env': 'OPENAI_API_KEY'},
 	'gpt-o4-mini': {'provider': 'openai', 'model_name': 'o4-mini', 'api_key_env': 'OPENAI_API_KEY'},
+	# OpenRouter (wildcard pattern)
+	'openrouter-*': {
+		'provider': 'openai_compatible',
+		'model_name_pattern': '*',  # Use the wildcard part as model name
+		'base_url': 'https://openrouter.ai/api/v1',
+		'api_key_env': 'OPENROUTER_API_KEY',
+	},
 	# X.ai (via OpenAI Compatible API)
 	'grok-2': {
 		'provider': 'openai_compatible',
@@ -104,6 +111,12 @@ SUPPORTED_MODELS = {
 	'grok-3': {
 		'provider': 'openai_compatible',
 		'model_name': 'grok-3-beta',
+		'base_url': 'https://api.x.ai/v1',
+		'api_key_env': 'XAI_API_KEY',
+	},
+	'grok-4': {
+		'provider': 'openai_compatible',
+		'model_name': 'grok-4-0709',
 		'base_url': 'https://api.x.ai/v1',
 		'api_key_env': 'XAI_API_KEY',
 	},
@@ -173,12 +186,57 @@ SUPPORTED_MODELS = {
 }
 
 
+def get_model_config(model_name: str):
+	"""Find the model configuration, supporting both exact matches and wildcard patterns."""
+	# First try exact match
+	if model_name in SUPPORTED_MODELS:
+		config = SUPPORTED_MODELS[model_name].copy()
+		return config, None
+
+	# Then try wildcard patterns - look for patterns containing *
+	for pattern, config in SUPPORTED_MODELS.items():
+		if '*' in pattern:
+			# Simple wildcard matching
+			# Split pattern on * and check if model_name matches the structure
+			parts = pattern.split('*')
+			if len(parts) == 2:  # Simple case: prefix-*
+				prefix, suffix = parts
+				if model_name.startswith(prefix) and model_name.endswith(suffix):
+					# Extract the wildcard part
+					wildcard_part = (
+						model_name[len(prefix) : len(model_name) - len(suffix)] if suffix else model_name[len(prefix) :]
+					)
+
+					config_copy = config.copy()
+					# Handle model_name_pattern substitution
+					if 'model_name_pattern' in config_copy:
+						# Replace * with the wildcard part
+						model_name_resolved = config_copy['model_name_pattern'].replace('*', wildcard_part)
+						config_copy['model_name'] = model_name_resolved
+						del config_copy['model_name_pattern']
+					return config_copy, wildcard_part
+
+	return None, None
+
+
 def get_llm(model_name: str):
 	"""Instantiates the correct ChatModel based on the model name."""
-	if model_name not in SUPPORTED_MODELS:
-		raise ValueError(f'Unsupported model: {model_name}. Supported models are: {list(SUPPORTED_MODELS.keys())}')
+	config, regex_match = get_model_config(model_name)
 
-	config = SUPPORTED_MODELS[model_name]
+	if config is None:
+		supported_models = []
+		wildcard_patterns = []
+		for k in SUPPORTED_MODELS.keys():
+			if '*' in k:
+				wildcard_patterns.append(k)
+			else:
+				supported_models.append(k)
+		raise ValueError(
+			f'Unsupported model: {model_name}. '
+			f'Supported models are: {supported_models}. '
+			f'Supported wildcard patterns: {wildcard_patterns}'
+		)
+
 	provider = config['provider']
 	api_key_env = config.get('api_key_env')
 	api_key = os.getenv(api_key_env) if api_key_env else None

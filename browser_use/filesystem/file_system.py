@@ -1,12 +1,12 @@
 import asyncio
 import re
 import shutil
-import tempfile
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
+from markdown_pdf import MarkdownPdf, Section
 from pydantic import BaseModel, Field
 
 INVALID_FILENAME_ERROR_MESSAGE = 'Error: Invalid filename format. Must be alphanumeric with supported extension.'
@@ -110,6 +110,27 @@ class CsvFile(BaseFile):
 		return 'csv'
 
 
+class PdfFile(BaseFile):
+	"""PDF file implementation"""
+
+	@property
+	def extension(self) -> str:
+		return 'pdf'
+
+	def sync_to_disk_sync(self, path: Path) -> None:
+		file_path = path / self.full_name
+		try:
+			md_pdf = MarkdownPdf()
+			md_pdf.add_section(Section(self.content))
+			md_pdf.save(file_path)
+		except Exception as e:
+			raise FileSystemError(f"Error: Could not write to file '{self.full_name}'. {str(e)}")
+
+	async def sync_to_disk(self, path: Path) -> None:
+		with ThreadPoolExecutor() as executor:
+			await asyncio.get_event_loop().run_in_executor(executor, lambda: self.sync_to_disk_sync(path))
+
+
 class FileSystemState(BaseModel):
 	"""Serializable state of the file system"""
 
@@ -138,6 +159,7 @@ class FileSystem:
 			'txt': TxtFile,
 			'json': JsonFile,
 			'csv': CsvFile,
+			'pdf': PdfFile,
 		}
 
 		self.files = {}
@@ -225,7 +247,7 @@ class FileSystem:
 
 					reader = pypdf.PdfReader(full_filename)
 					num_pages = len(reader.pages)
-					MAX_PDF_PAGES = 5
+					MAX_PDF_PAGES = 10
 					extra_pages = num_pages - MAX_PDF_PAGES
 					extracted_text = ''
 					for page in reader.pages[:MAX_PDF_PAGES]:
@@ -422,6 +444,8 @@ class FileSystem:
 				file_obj = JsonFile(**file_info)
 			elif file_type == 'CsvFile':
 				file_obj = CsvFile(**file_info)
+			elif file_type == 'PdfFile':
+				file_obj = PdfFile(**file_info)
 			else:
 				# Skip unknown file types
 				continue
@@ -431,24 +455,3 @@ class FileSystem:
 			file_obj.sync_to_disk_sync(fs.data_dir)
 
 		return fs
-
-
-if __name__ == '__main__':
-	# test to understand what model_dump() does
-	md_file = MarkdownFile(name='test.md')
-	md_file.update_content('Hello, world!')
-	print(md_file.model_dump())
-
-	# test to understand how state looks like
-	tempdir = tempfile.gettempdir()
-	fs = FileSystem(base_dir=Path(tempdir) / 'browseruse_test_data')
-	print(fs.get_state())
-	fs.nuke()
-
-	# test to understand creating a filesystem, getting its state, and restoring it
-	fs = FileSystem(base_dir=Path(tempdir) / 'browseruse_test_data')
-	state = fs.get_state()
-	print(state)
-	fs2 = FileSystem.from_state(state)
-	print(fs2.get_state())
-	fs2.nuke()

@@ -626,7 +626,7 @@ class BrowserProfile(BrowserConnectArgs, BrowserLaunchPersistentContextArgs, Bro
 	def warn_storage_state_user_data_dir_conflict(self) -> Self:
 		"""Warn when both storage_state and user_data_dir are set, as this can cause conflicts."""
 		has_storage_state = self.storage_state is not None
-		has_user_data_dir = self.user_data_dir is not None
+		has_user_data_dir = (self.user_data_dir is not None) and ('tmp' not in str(self.user_data_dir).lower())
 		has_cookies_file = self.cookies_file is not None
 		static_source = 'cookies_file' if has_cookies_file else 'storage_state' if has_storage_state else None
 

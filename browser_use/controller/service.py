@@ -375,9 +375,10 @@ Only use this for specific queries for information retrieval from the page. Don'
 			# replace multiple sequential \n with a single \n
 			content = re.sub(r'\n+', '\n', content)
 
-			# limit to 40000 characters - remove text in the middle this is approx 20000 tokens
-			max_chars = 40000
+			# limit to 30000 characters - remove text in the middle (≈15000 tokens)
+			max_chars = 30000
 			if len(content) > max_chars:
+				logger.info(f'Content is too long, removing middle {len(content) - max_chars} characters')
 				content = (
 					content[: max_chars // 2]
 					+ '\n... left out the middle because it was too long ...\n'
@@ -395,7 +396,7 @@ Explain the content of the page and that the requested information is not availa
 				# Aggressive timeout for LLM call
 				response = await asyncio.wait_for(
 					page_extraction_llm.ainvoke([UserMessage(content=formatted_prompt)]),
-					timeout=60.0,  # 30 second aggressive timeout for LLM call
+					timeout=120.0,  # 120 second aggressive timeout for LLM call
 				)
 
 				extracted_content = f'Page Link: {page.url}\nQuery: {query}\nExtracted Content:\n{response.completion}'
@@ -742,7 +743,9 @@ Explain the content of the page and that the requested information is not availa
 				raise BrowserError(msg)
 
 		# File System Actions
-		@self.registry.action('Write content to file_name in file system. Allowed extensions are .md, .txt, .json, .csv.')
+		@self.registry.action(
+			'Write content to file_name in file system. Allowed extensions are .md, .txt, .json, .csv, .pdf. For .pdf files, write the content in markdown format and it will automatically be converted to a properly formatted PDF document.'
+		)
 		async def write_file(file_name: str, content: str, file_system: FileSystem):
 			result = await file_system.write_file(file_name, content)
 			logger.info(f'💾 {result}')

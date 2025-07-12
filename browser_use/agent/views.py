@@ -37,7 +37,6 @@ class AgentSettings(BaseModel):
 	validate_output: bool = False
 	message_context: str | None = None
 	generate_gif: bool | str = False
-	available_file_paths: list[str] | None = None
 	override_system_message: str | None = None
 	extend_system_message: str | None = None
 	include_attributes: list[str] = [
