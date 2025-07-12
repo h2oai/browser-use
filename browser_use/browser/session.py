@@ -75,12 +75,13 @@ MAX_SCREENSHOT_WIDTH = 1920
 def _log_glob_warning(domain: str, glob: str, logger: logging.Logger):
 	global _GLOB_WARNING_SHOWN
 	if not _GLOB_WARNING_SHOWN:
-		logger.warning(
-			# glob patterns are very easy to mess up and match too many domains by accident
-			# e.g. if you only need to access gmail, don't use *.google.com because an attacker could convince the agent to visit a malicious doc
-			# on docs.google.com/s/some/evil/doc to set up a prompt injection attack
-			f"⚠️ Allowing agent to visit {domain} based on allowed_domains=['{glob}', ...]. Set allowed_domains=['{domain}', ...] explicitly to avoid matching too many domains!"
-		)
+		if os.getenv('H2OGPT_BROWSER_VERBOSE'):
+			logger.warning(
+				# glob patterns are very easy to mess up and match too many domains by accident
+				# e.g. if you only need to access gmail, don't use *.google.com because an attacker could convince the agent to visit a malicious doc
+				# on docs.google.com/s/some/evil/doc to set up a prompt injection attack
+				f"⚠️ Allowing agent to visit {domain} based on allowed_domains=['{glob}', ...]. Set allowed_domains=['{domain}', ...] explicitly to avoid matching too many domains!"
+			)
 		_GLOB_WARNING_SHOWN = True
 
 
