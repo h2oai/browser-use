@@ -2566,9 +2566,15 @@ class BrowserSession(BaseModel):
 				# await self.browser_context.add_local_storage(storage_state['localStorage'])
 				num_entries = len(storage_state['cookies']) + len(storage_state.get('origins', []))
 				if num_entries:
-					self.logger.info(f'🍪 Loaded {num_entries} cookies from storage_state= {storage_state}')
+					if os.getenv('H2OGPT_BROWSER_VERBOSE'):
+						self.logger.info(f'🍪 Loaded {num_entries} cookies from storage_state= {storage_state}')
+					else:
+						self.logger.info(f'🍪 Loaded {num_entries} cookies from storage_state')
 			except Exception as e:
-				self.logger.warning(f'❌ Failed to load cookies from storage_state= {storage_state}: {type(e).__name__}: {e}')
+				if os.getenv('H2OGPT_BROWSER_VERBOSE'):
+					self.logger.warning(f'❌ Failed to load cookies from storage_state= {storage_state}: {type(e).__name__}: {e}')
+				else:
+					self.logger.warning(f'❌ Failed to load cookies from storage_state: {type(e).__name__}: {e}')
 				return
 
 	async def load_cookies_from_file(self, *args, **kwargs) -> None:
