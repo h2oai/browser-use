@@ -995,36 +995,40 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 		"""Stream token usage information in XML format for real-time monitoring"""
 		import json
 		
-		# Get token counts
-		prompt_cached_tokens = getattr(usage, 'prompt_cached_tokens', None) or 0
-		prompt_cache_creation_tokens = getattr(usage, 'prompt_cache_creation_tokens', None) or 0
+		# Get token counts from usage object
+		input_tokens = usage.prompt_tokens
+		cache_read_tokens = getattr(usage, 'prompt_cached_tokens', None) or 0
+		cache_creation_tokens = getattr(usage, 'prompt_cache_creation_tokens', None) or 0
 		
-		# Calculate cost-effective prompt tokens based on Anthropic pricing
-		# Regular input tokens are at full price, cached tokens at ~10% price
-		regular_input_tokens = usage.prompt_tokens - prompt_cached_tokens
-		
-		# Calculate effective prompt tokens weighted by cost
+		# Calculate effective prompt tokens using proper cost accounting
 		model_name = self.llm.model.lower()
 		if any(model in model_name for model in ['claude', 'anthropic']):
-			# Use Anthropic cost ratios: cached tokens ~10% of regular input cost
-			cache_cost_ratio = 0.1
-			effective_prompt_tokens = regular_input_tokens + (prompt_cached_tokens * cache_cost_ratio)
+			# Proper cost calculation for Anthropic models:
+			# - Cache creation: costs 1.25x normal (e.g., $18.75 vs $15/MTok)  
+			# - Cache reads: cost 0.1x normal (e.g., $1.50 vs $15/MTok)
+			# - Regular tokens: normal cost (1.0x)
+			
+			# Calculate regular tokens (what's left after cache tokens)
+			regular_tokens = input_tokens - cache_creation_tokens - cache_read_tokens
+			
+			# Apply cost multipliers
+			cache_creation_multiplier = 1.25  # 25% more expensive than regular
+			cache_read_multiplier = 0.1       # 90% cheaper than regular
+			
+			effective_prompt_tokens = (regular_tokens * 1.0 +                      # regular cost
+									 cache_creation_tokens * cache_creation_multiplier +  # 25% premium
+									 cache_read_tokens * cache_read_multiplier)          # 90% discount
 		else:
 			# For non-Anthropic models, use regular calculation
-			effective_prompt_tokens = regular_input_tokens
-		
-		# Add cache creation tokens at their higher cost (1.25x-2x regular input)
-		if prompt_cache_creation_tokens > 0:
-			cache_creation_ratio = 1.25  # Conservative estimate
-			effective_prompt_tokens += prompt_cache_creation_tokens * cache_creation_ratio
+			effective_prompt_tokens = input_tokens
 		
 		# Build usage data dictionary
 		usage_data = {
 			"prompt_tokens": int(effective_prompt_tokens),
 			"completion_tokens": usage.completion_tokens,
 			"total_tokens": usage.total_tokens,
-			"prompt_cached_tokens": getattr(usage, 'prompt_cached_tokens', None),
-			"prompt_cache_creation_tokens": getattr(usage, 'prompt_cache_creation_tokens', None),
+			"prompt_cached_tokens": cache_read_tokens if cache_read_tokens else None,
+			"prompt_cache_creation_tokens": cache_creation_tokens if cache_creation_tokens else None,
 			"prompt_image_tokens": getattr(usage, 'prompt_image_tokens', None),
 		}
 		
