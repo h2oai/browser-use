@@ -974,6 +974,10 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 			response = await self.llm.ainvoke(input_messages, output_format=self.AgentOutput)
 			parsed = response.completion
 
+			# Stream usage information if available
+			if response.usage:
+				self._stream_usage_info(response.usage)
+
 			# cut the number of actions to max_actions_per_step if needed
 			if len(parsed.action) > self.settings.max_actions_per_step:
 				parsed.action = parsed.action[: self.settings.max_actions_per_step]
@@ -986,6 +990,53 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 		except ValidationError as e:
 			# Just re-raise - Pydantic's validation errors are already descriptive
 			raise
+
+	def _stream_usage_info(self, usage) -> None:
+		"""Stream token usage information in XML format for real-time monitoring"""
+		import json
+		
+		# Get token counts
+		prompt_cached_tokens = getattr(usage, 'prompt_cached_tokens', None) or 0
+		prompt_cache_creation_tokens = getattr(usage, 'prompt_cache_creation_tokens', None) or 0
+		
+		# Calculate cost-effective prompt tokens based on Anthropic pricing
+		# Regular input tokens are at full price, cached tokens at ~10% price
+		regular_input_tokens = usage.prompt_tokens - prompt_cached_tokens
+		
+		# Calculate effective prompt tokens weighted by cost
+		model_name = self.llm.model.lower()
+		if any(model in model_name for model in ['claude', 'anthropic']):
+			# Use Anthropic cost ratios: cached tokens ~10% of regular input cost
+			cache_cost_ratio = 0.1
+			effective_prompt_tokens = regular_input_tokens + (prompt_cached_tokens * cache_cost_ratio)
+		else:
+			# For non-Anthropic models, use regular calculation
+			effective_prompt_tokens = regular_input_tokens
+		
+		# Add cache creation tokens at their higher cost (1.25x-2x regular input)
+		if prompt_cache_creation_tokens > 0:
+			cache_creation_ratio = 1.25  # Conservative estimate
+			effective_prompt_tokens += prompt_cache_creation_tokens * cache_creation_ratio
+		
+		# Construct usage data in format matching H2OConversableAgent
+		usage_dict = {
+			self.llm.model: {
+				"prompt_tokens": int(effective_prompt_tokens),
+				"completion_tokens": usage.completion_tokens,
+				"total_tokens": usage.total_tokens,
+				"prompt_cached_tokens": getattr(usage, 'prompt_cached_tokens', None),
+				"prompt_cache_creation_tokens": getattr(usage, 'prompt_cache_creation_tokens', None),
+				"prompt_image_tokens": getattr(usage, 'prompt_image_tokens', None),
+			}
+		}
+		
+		# Remove None values to keep output clean
+		model_data = usage_dict[self.llm.model]
+		usage_dict[self.llm.model] = {k: v for k, v in model_data.items() if v is not None}
+		
+		# Stream the usage information
+		usage_tag = "__stream_cost_usage__"
+		print(f"\n<{usage_tag}>{json.dumps(usage_dict)}</{usage_tag}>\n", flush=True)
 
 	def _log_agent_run(self) -> None:
 		"""Log the agent run"""
