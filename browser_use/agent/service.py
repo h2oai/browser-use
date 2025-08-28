@@ -1018,21 +1018,24 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 			cache_creation_ratio = 1.25  # Conservative estimate
 			effective_prompt_tokens += prompt_cache_creation_tokens * cache_creation_ratio
 		
-		# Construct usage data in format matching H2OConversableAgent
-		usage_dict = {
-			self.llm.model: {
-				"prompt_tokens": int(effective_prompt_tokens),
-				"completion_tokens": usage.completion_tokens,
-				"total_tokens": usage.total_tokens,
-				"prompt_cached_tokens": getattr(usage, 'prompt_cached_tokens', None),
-				"prompt_cache_creation_tokens": getattr(usage, 'prompt_cache_creation_tokens', None),
-				"prompt_image_tokens": getattr(usage, 'prompt_image_tokens', None),
-			}
+		# Build usage data dictionary
+		usage_data = {
+			"prompt_tokens": int(effective_prompt_tokens),
+			"completion_tokens": usage.completion_tokens,
+			"total_tokens": usage.total_tokens,
+			"prompt_cached_tokens": getattr(usage, 'prompt_cached_tokens', None),
+			"prompt_cache_creation_tokens": getattr(usage, 'prompt_cache_creation_tokens', None),
+			"prompt_image_tokens": getattr(usage, 'prompt_image_tokens', None),
 		}
 		
 		# Remove None values to keep output clean
-		model_data = usage_dict[self.llm.model]
-		usage_dict[self.llm.model] = {k: v for k, v in model_data.items() if v is not None}
+		usage_data = {k: v for k, v in usage_data.items() if v is not None}
+		
+		# Create usage dict with both model name and browser_agent.py keys
+		usage_dict = {
+			self.llm.model: usage_data,
+			"browser_agent.py": usage_data
+		}
 		
 		# Stream the usage information
 		usage_tag = "__stream_cost_usage__"
