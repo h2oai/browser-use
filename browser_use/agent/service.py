@@ -1057,10 +1057,12 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 		# Remove None values to keep output clean
 		usage_data = {k: v for k, v in usage_data.items() if v is not None}
 		
-		# Create usage dict with both model name and browser_agent.py keys
+		# Add metadata to usage data to avoid double-counting
+		usage_data['agent_tool'] = "browser_agent.py"
+		
+		# Create usage dict with model name only
 		usage_dict = {
 			self.llm.model: usage_data,
-			"browser_agent.py": usage_data
 		}
 		
 		# Stream the usage information
