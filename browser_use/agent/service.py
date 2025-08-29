@@ -1008,8 +1008,27 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 			# - Cache reads: cost 0.1x normal (e.g., $1.50 vs $15/MTok)
 			# - Regular tokens: normal cost (1.0x)
 			
-			# Calculate regular tokens (what's left after cache tokens)
-			regular_tokens = input_tokens - cache_creation_tokens - cache_read_tokens
+			# For Anthropic API, handle different cache scenarios:
+			# Scenario 1: Cache creation + regular tokens -> input_tokens includes both
+			# Scenario 2: Cache reads only -> input_tokens is just new regular tokens
+			# Scenario 3: Mixed -> input_tokens includes regular + creation, reads are separate
+			
+			# DEBUG: Print calculation details
+			# print(f"🔧 BROWSER-USE EFFECTIVE TOKENS DEBUG:")
+			# print(f"  input_tokens (from usage): {input_tokens}")
+			# print(f"  cache_read_tokens: {cache_read_tokens}")
+			# print(f"  cache_creation_tokens: {cache_creation_tokens}")
+			
+			if cache_creation_tokens > 0:
+				# Scenario 1 & 3: input_tokens includes both regular and cache_creation
+				regular_tokens = input_tokens - cache_creation_tokens - cache_read_tokens
+				# print(f"  scenario: cache creation present")
+				# print(f"  calculated regular_tokens: {regular_tokens}")
+			else:
+				# Scenario 2: cache reads only, input_tokens is just regular tokens
+				regular_tokens = input_tokens  # input_tokens already represents regular tokens
+				# print(f"  scenario: cache reads only")
+				# print(f"  regular_tokens = input_tokens: {regular_tokens}")
 			
 			# Apply cost multipliers
 			cache_creation_multiplier = 1.25  # 25% more expensive than regular
@@ -1018,6 +1037,9 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 			effective_prompt_tokens = (regular_tokens * 1.0 +                      # regular cost
 									 cache_creation_tokens * cache_creation_multiplier +  # 25% premium
 									 cache_read_tokens * cache_read_multiplier)          # 90% discount
+			
+			# print(f"  final effective_prompt_tokens: {effective_prompt_tokens}")
+			# print(f"  breakdown: {regular_tokens}*1.0 + {cache_creation_tokens}*1.25 + {cache_read_tokens}*0.1")
 		else:
 			# For non-Anthropic models, use regular calculation
 			effective_prompt_tokens = input_tokens

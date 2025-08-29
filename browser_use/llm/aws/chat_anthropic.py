@@ -132,6 +132,14 @@ class ChatAnthropicBedrock(ChatAWSBedrock):
 		"""Extract usage information from the response."""
 		# For Anthropic API: input_tokens represents total tokens (regular + cache_creation + cache_read)
 		# This was verified by comprehensive testing in H2OGPT internal test suite
+		
+		# DEBUG: Print raw Anthropic usage data  
+		# print(f"🔍 RAW AWS ANTHROPIC USAGE DEBUG:")
+		# print(f"  input_tokens: {response.usage.input_tokens}")
+		# print(f"  output_tokens: {response.usage.output_tokens}")
+		# print(f"  cache_read_input_tokens: {response.usage.cache_read_input_tokens}")
+		# print(f"  cache_creation_input_tokens: {response.usage.cache_creation_input_tokens}")
+		
 		usage = ChatInvokeUsage(
 			prompt_tokens=response.usage.input_tokens,  # input_tokens is already total tokens
 			completion_tokens=response.usage.output_tokens,
@@ -140,6 +148,15 @@ class ChatAnthropicBedrock(ChatAWSBedrock):
 			prompt_cache_creation_tokens=response.usage.cache_creation_input_tokens,
 			prompt_image_tokens=None,
 		)
+		
+		# DEBUG: Print processed ChatInvokeUsage
+		# print(f"📊 PROCESSED AWS USAGE DEBUG:")
+		# print(f"  prompt_tokens: {usage.prompt_tokens}")
+		# print(f"  completion_tokens: {usage.completion_tokens}")
+		# print(f"  prompt_cached_tokens: {usage.prompt_cached_tokens}")
+		# print(f"  prompt_cache_creation_tokens: {usage.prompt_cache_creation_tokens}")
+		# print(f"  total_tokens: {usage.total_tokens}")
+		
 		return usage
 
 	@overload
