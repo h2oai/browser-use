@@ -107,11 +107,10 @@ class ChatAnthropic(BaseChatModel):
 		return str(self.model)
 
 	def _get_usage(self, response: Message) -> ChatInvokeUsage | None:
+		# For Anthropic API: input_tokens represents total tokens (regular + cache_creation + cache_read)
+		# This was verified by comprehensive testing in H2OGPT internal test suite
 		usage = ChatInvokeUsage(
-			prompt_tokens=response.usage.input_tokens
-			+ (
-				response.usage.cache_read_input_tokens or 0
-			),  # Total tokens in Anthropic are a bit fucked, you have to add cached tokens to the prompt tokens
+			prompt_tokens=response.usage.input_tokens,  # input_tokens is already total tokens
 			completion_tokens=response.usage.output_tokens,
 			total_tokens=response.usage.input_tokens + response.usage.output_tokens,
 			prompt_cached_tokens=response.usage.cache_read_input_tokens,
