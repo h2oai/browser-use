@@ -1075,8 +1075,10 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 				usage_dict[field] = usage_data[field]
 		
 		# Stream the usage information  
-		from api_server.agent_enums import stream_tags
-		print(f"\n<{stream_tags['usage']}>{json.dumps(usage_dict)}</{stream_tags['usage']}>\n", flush=True)
+		# from api_server.agent_enums import stream_tags
+		# stream_tag_usage = stream_tags['usage']
+		stream_tag_usage = '__stream_cost_usage__'  # hard-coded
+		print(f"\n<{stream_tag_usage}>{json.dumps(usage_dict)}</{stream_tag_usage}>\n", flush=True)
 
 	def _log_agent_run(self) -> None:
 		"""Log the agent run"""
