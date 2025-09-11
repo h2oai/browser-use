@@ -1060,14 +1060,23 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 		# Add metadata to usage data to avoid double-counting
 		usage_data['agent_tool'] = "browser_agent.py"
 		
-		# Create usage dict with model name only
+		# Create usage dict in standard format (not nested under model name)
 		usage_dict = {
-			self.llm.model: usage_data,
+			'model': self.llm.model,
+			'agent_tool': usage_data.get('agent_tool', 'browser_agent.py'),
+			'completion_tokens': usage_data.get('completion_tokens', 0),
+			'prompt_tokens': usage_data.get('prompt_tokens', 0),
+			'total_tokens': usage_data.get('total_tokens', 0),
 		}
 		
-		# Stream the usage information
-		usage_tag = "__stream_cost_usage__"
-		print(f"\n<{usage_tag}>{json.dumps(usage_dict)}</{usage_tag}>\n", flush=True)
+		# Add additional fields if available
+		for field in ['prompt_cached_tokens', 'prompt_cache_creation_tokens', 'prompt_image_tokens']:
+			if field in usage_data and usage_data[field] is not None:
+				usage_dict[field] = usage_data[field]
+		
+		# Stream the usage information  
+		from api_server.agent_enums import stream_tags
+		print(f"\n<{stream_tags['usage']}>{json.dumps(usage_dict)}</{stream_tags['usage']}>\n", flush=True)
 
 	def _log_agent_run(self) -> None:
 		"""Log the agent run"""
