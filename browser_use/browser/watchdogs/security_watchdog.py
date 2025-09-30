@@ -1,5 +1,6 @@
 """Security watchdog for enforcing URL access policies."""
 
+import os
 from typing import TYPE_CHECKING, ClassVar
 
 from bubus import BaseEvent
@@ -95,10 +96,11 @@ class SecurityWatchdog(BaseWatchdog):
 		global _GLOB_WARNING_SHOWN
 		if not _GLOB_WARNING_SHOWN:
 			_GLOB_WARNING_SHOWN = True
-			self.logger.warning(
-				'⚠️ Using glob patterns in allowed_domains. '
-				'Note: Patterns like "*.example.com" will match both subdomains AND the main domain.'
-			)
+			if os.getenv('H2OGPT_BROWSER_VERBOSE'):
+				self.logger.warning(
+					'⚠️ Using glob patterns in allowed_domains. '
+					'Note: Patterns like "*.example.com" will match both subdomains AND the main domain.'
+				)
 
 	def _is_url_allowed(self, url: str) -> bool:
 		"""Check if a URL is allowed based on the allowed_domains configuration.

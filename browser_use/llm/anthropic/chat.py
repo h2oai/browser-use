@@ -41,6 +41,7 @@ class ChatAnthropic(BaseChatModel):
 	temperature: float | None = None
 	top_p: float | None = None
 	seed: int | None = None
+	thinking: dict | None = None
 
 	# Client initialization parameters
 	api_key: str | None = None
@@ -94,6 +95,9 @@ class ChatAnthropic(BaseChatModel):
 		if self.seed is not None:
 			client_params['seed'] = self.seed
 
+		if self.thinking is not None:
+			client_params['thinking'] = self.thinking
+
 		return client_params
 
 	def get_client(self) -> AsyncAnthropic:
@@ -111,17 +115,33 @@ class ChatAnthropic(BaseChatModel):
 		return str(self.model)
 
 	def _get_usage(self, response: Message) -> ChatInvokeUsage | None:
+		# For Anthropic API: input_tokens represents total tokens (regular + cache_creation + cache_read)
+		# This was verified by comprehensive testing in H2OGPT internal test suite
+
+		# DEBUG: Print raw Anthropic usage data
+		# print(f"🔍 RAW ANTHROPIC USAGE DEBUG:")
+		# print(f"  input_tokens: {response.usage.input_tokens}")
+		# print(f"  output_tokens: {response.usage.output_tokens}")
+		# print(f"  cache_read_input_tokens: {response.usage.cache_read_input_tokens}")
+		# print(f"  cache_creation_input_tokens: {response.usage.cache_creation_input_tokens}")
+
 		usage = ChatInvokeUsage(
-			prompt_tokens=response.usage.input_tokens
-			+ (
-				response.usage.cache_read_input_tokens or 0
-			),  # Total tokens in Anthropic are a bit fucked, you have to add cached tokens to the prompt tokens
+			prompt_tokens=response.usage.input_tokens,  # input_tokens is already total tokens
 			completion_tokens=response.usage.output_tokens,
 			total_tokens=response.usage.input_tokens + response.usage.output_tokens,
 			prompt_cached_tokens=response.usage.cache_read_input_tokens,
 			prompt_cache_creation_tokens=response.usage.cache_creation_input_tokens,
 			prompt_image_tokens=None,
 		)
+
+		# DEBUG: Print processed ChatInvokeUsage
+		# print(f"📊 PROCESSED USAGE DEBUG:")
+		# print(f"  prompt_tokens: {usage.prompt_tokens}")
+		# print(f"  completion_tokens: {usage.completion_tokens}")
+		# print(f"  prompt_cached_tokens: {usage.prompt_cached_tokens}")
+		# print(f"  prompt_cache_creation_tokens: {usage.prompt_cache_creation_tokens}")
+		# print(f"  total_tokens: {usage.total_tokens}")
+
 		return usage
 
 	@overload

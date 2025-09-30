@@ -45,7 +45,8 @@ class StorageStateWatchdog(BaseWatchdog):
 
 	async def on_BrowserConnectedEvent(self, event: BrowserConnectedEvent) -> None:
 		"""Start monitoring when browser starts."""
-		self.logger.debug('[StorageStateWatchdog] 🍪 Initializing auth/cookies sync <-> with storage_state.json file')
+		if os.getenv('H2OGPT_BROWSER_VERBOSE'):
+			self.logger.info('[StorageStateWatchdog] 🍪 Initializing auth/cookies sync <-> with storage_state.json file')
 
 		# Start monitoring
 		await self._start_monitoring()
@@ -211,11 +212,12 @@ class StorageStateWatchdog(BaseWatchdog):
 					)
 				)
 
-				self.logger.debug(
-					f'[StorageStateWatchdog] Saved storage state to {json_path} '
-					f'({len(merged_state.get("cookies", []))} cookies, '
-					f'{len(merged_state.get("origins", []))} origins)'
-				)
+				if os.getenv('H2OGPT_BROWSER_VERBOSE'):
+					self.logger.info(
+						f'[StorageStateWatchdog] Saved storage state to {json_path} '
+						f'({len(merged_state.get("cookies", []))} cookies, '
+						f'{len(merged_state.get("origins", []))} origins)'
+					)
 
 			except Exception as e:
 				self.logger.error(f'[StorageStateWatchdog] Failed to save storage state: {e}')
@@ -241,7 +243,8 @@ class StorageStateWatchdog(BaseWatchdog):
 			if 'cookies' in storage and storage['cookies']:
 				await self.browser_session._cdp_set_cookies(storage['cookies'])
 				self._last_cookie_state = storage['cookies'].copy()
-				self.logger.debug(f'[StorageStateWatchdog] Added {len(storage["cookies"])} cookies from storage state')
+				if os.getenv('H2OGPT_BROWSER_VERBOSE'):
+					self.logger.info(f'[StorageStateWatchdog] Added {len(storage["cookies"])} cookies from storage state')
 
 			# Apply origins (localStorage/sessionStorage) if present
 			if 'origins' in storage and storage['origins']:
@@ -258,9 +261,10 @@ class StorageStateWatchdog(BaseWatchdog):
 								window.sessionStorage.setItem({json.dumps(item['name'])}, {json.dumps(item['value'])});
 							"""
 							await self.browser_session._cdp_add_init_script(script)
-				self.logger.debug(
-					f'[StorageStateWatchdog] Applied localStorage/sessionStorage from {len(storage["origins"])} origins'
-				)
+				if os.getenv('H2OGPT_BROWSER_VERBOSE'):
+					self.logger.info(
+						f'[StorageStateWatchdog] Applied localStorage/sessionStorage from {len(storage["origins"])} origins'
+					)
 
 			self.event_bus.dispatch(
 				StorageStateLoadedEvent(
@@ -270,7 +274,10 @@ class StorageStateWatchdog(BaseWatchdog):
 				)
 			)
 
-			self.logger.debug(f'[StorageStateWatchdog] Loaded storage state from: {load_path}')
+			if os.getenv('H2OGPT_BROWSER_VERBOSE'):
+				self.logger.info(f'[StorageStateWatchdog] Loaded storage state from: {load_path}')
+			else:
+				self.logger.info(f'[StorageStateWatchdog] Loaded storage state')
 
 		except Exception as e:
 			self.logger.error(f'[StorageStateWatchdog] Failed to load storage state: {e}')

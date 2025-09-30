@@ -3,6 +3,7 @@ import gc
 import inspect
 import json
 import logging
+import os
 import re
 import sys
 import tempfile
@@ -498,7 +499,8 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 				self.file_system = FileSystem.from_state(self.state.file_system_state)
 				# The parent directory of base_dir is the original file_system_path
 				self.file_system_path = str(self.file_system.base_dir)
-				logger.debug(f'💾 File system restored from state to: {self.file_system_path}')
+				if os.getenv('H2OGPT_BROWSER_VERBOSE'):
+					logger.info(f'💾 File system restored from state to: {self.file_system_path}')
 				return
 			except Exception as e:
 				logger.error(f'💾 Failed to restore file system from state: {e}')
@@ -520,7 +522,8 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 		# Save file system state to agent state
 		self.state.file_system_state = self.file_system.get_state()
 
-		logger.debug(f'💾 File system path: {self.file_system_path}')
+		if os.getenv('H2OGPT_BROWSER_VERBOSE'):
+			logger.info(f'💾 File system path: {self.file_system_path}')
 
 	def _set_screenshot_service(self) -> None:
 		"""Initialize screenshot service using agent directory"""
@@ -974,6 +977,10 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 			response = await self.llm.ainvoke(input_messages, output_format=self.AgentOutput)
 			parsed = response.completion
 
+			# Stream usage information if available
+			if response.usage:
+				self._stream_usage_info(response.usage)
+
 			# cut the number of actions to max_actions_per_step if needed
 			if len(parsed.action) > self.settings.max_actions_per_step:
 				parsed.action = parsed.action[: self.settings.max_actions_per_step]
@@ -986,6 +993,95 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 		except ValidationError:
 			# Just re-raise - Pydantic's validation errors are already descriptive
 			raise
+
+	def _stream_usage_info(self, usage) -> None:
+		"""Stream token usage information in XML format for real-time monitoring"""
+		import json
+
+		# Get token counts from usage object
+		input_tokens = usage.prompt_tokens
+		cache_read_tokens = getattr(usage, 'prompt_cached_tokens', None) or 0
+		cache_creation_tokens = getattr(usage, 'prompt_cache_creation_tokens', None) or 0
+
+		# Calculate effective prompt tokens using proper cost accounting
+		model_name = self.llm.model.lower()
+		if any(model in model_name for model in ['claude', 'anthropic']):
+			# Proper cost calculation for Anthropic models:
+			# - Cache creation: costs 1.25x normal (e.g., $18.75 vs $15/MTok)
+			# - Cache reads: cost 0.1x normal (e.g., $1.50 vs $15/MTok)
+			# - Regular tokens: normal cost (1.0x)
+
+			# For Anthropic API, handle different cache scenarios:
+			# Scenario 1: Cache creation + regular tokens -> input_tokens includes both
+			# Scenario 2: Cache reads only -> input_tokens is just new regular tokens
+			# Scenario 3: Mixed -> input_tokens includes regular + creation, reads are separate
+
+			# DEBUG: Print calculation details
+			# print(f"🔧 BROWSER-USE EFFECTIVE TOKENS DEBUG:")
+			# print(f"  input_tokens (from usage): {input_tokens}")
+			# print(f"  cache_read_tokens: {cache_read_tokens}")
+			# print(f"  cache_creation_tokens: {cache_creation_tokens}")
+
+			if cache_creation_tokens > 0:
+				# Scenario 1 & 3: input_tokens includes both regular and cache_creation
+				regular_tokens = input_tokens - cache_creation_tokens - cache_read_tokens
+				# print(f"  scenario: cache creation present")
+				# print(f"  calculated regular_tokens: {regular_tokens}")
+			else:
+				# Scenario 2: cache reads only, input_tokens is just regular tokens
+				regular_tokens = input_tokens  # input_tokens already represents regular tokens
+				# print(f"  scenario: cache reads only")
+				# print(f"  regular_tokens = input_tokens: {regular_tokens}")
+
+			# Apply cost multipliers
+			cache_creation_multiplier = 1.25  # 25% more expensive than regular
+			cache_read_multiplier = 0.1       # 90% cheaper than regular
+
+			effective_prompt_tokens = (regular_tokens * 1.0 +                      # regular cost
+									 cache_creation_tokens * cache_creation_multiplier +  # 25% premium
+									 cache_read_tokens * cache_read_multiplier)          # 90% discount
+
+			# print(f"  final effective_prompt_tokens: {effective_prompt_tokens}")
+			# print(f"  breakdown: {regular_tokens}*1.0 + {cache_creation_tokens}*1.25 + {cache_read_tokens}*0.1")
+		else:
+			# For non-Anthropic models, use regular calculation
+			effective_prompt_tokens = input_tokens
+
+		# Build usage data dictionary
+		usage_data = {
+			"prompt_tokens": int(effective_prompt_tokens),
+			"completion_tokens": usage.completion_tokens,
+			"total_tokens": usage.total_tokens,
+			"prompt_cached_tokens": cache_read_tokens if cache_read_tokens else None,
+			"prompt_cache_creation_tokens": cache_creation_tokens if cache_creation_tokens else None,
+			"prompt_image_tokens": getattr(usage, 'prompt_image_tokens', None),
+		}
+
+		# Remove None values to keep output clean
+		usage_data = {k: v for k, v in usage_data.items() if v is not None}
+
+		# Add metadata to usage data to avoid double-counting
+		usage_data['agent_tool'] = "browser_agent.py"
+
+		# Create usage dict in standard format (not nested under model name)
+		usage_dict = {
+			'model': self.llm.model,
+			'agent_tool': usage_data.get('agent_tool', 'browser_agent.py'),
+			'completion_tokens': usage_data.get('completion_tokens', 0),
+			'prompt_tokens': usage_data.get('prompt_tokens', 0),
+			'total_tokens': usage_data.get('total_tokens', 0),
+		}
+
+		# Add additional fields if available
+		for field in ['prompt_cached_tokens', 'prompt_cache_creation_tokens', 'prompt_image_tokens']:
+			if field in usage_data and usage_data[field] is not None:
+				usage_dict[field] = usage_data[field]
+
+		# Stream the usage information
+		# from api_server.agent_enums import stream_tags
+		# stream_tag_usage = stream_tags['usage']
+		stream_tag_usage = '__stream_cost_usage__'  # hard-coded
+		print(f"\n<{stream_tag_usage}>{json.dumps(usage_dict)}</{stream_tag_usage}>\n", flush=True)
 
 	def _log_agent_run(self) -> None:
 		"""Log the agent run"""
