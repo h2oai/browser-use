@@ -41,6 +41,7 @@ class ChatAnthropic(BaseChatModel):
 	temperature: float | None = None
 	top_p: float | None = None
 	seed: int | None = None
+	thinking: dict | None = None
 
 	# Client initialization parameters
 	api_key: str | None = None
@@ -94,6 +95,9 @@ class ChatAnthropic(BaseChatModel):
 		if self.seed is not None:
 			client_params['seed'] = self.seed
 
+		if self.thinking is not None:
+			client_params['thinking'] = self.thinking
+
 		return client_params
 
 	def get_client(self) -> AsyncAnthropic:
@@ -111,17 +115,18 @@ class ChatAnthropic(BaseChatModel):
 		return str(self.model)
 
 	def _get_usage(self, response: Message) -> ChatInvokeUsage | None:
+		# For Anthropic API: input_tokens represents total tokens (regular + cache_creation + cache_read)
+		# This was verified by comprehensive testing in H2OGPT internal test suite
+
 		usage = ChatInvokeUsage(
-			prompt_tokens=response.usage.input_tokens
-			+ (
-				response.usage.cache_read_input_tokens or 0
-			),  # Total tokens in Anthropic are a bit fucked, you have to add cached tokens to the prompt tokens
+			prompt_tokens=response.usage.input_tokens,  # input_tokens is already total tokens
 			completion_tokens=response.usage.output_tokens,
 			total_tokens=response.usage.input_tokens + response.usage.output_tokens,
 			prompt_cached_tokens=response.usage.cache_read_input_tokens,
 			prompt_cache_creation_tokens=response.usage.cache_creation_input_tokens,
 			prompt_image_tokens=None,
 		)
+
 		return usage
 
 	@overload

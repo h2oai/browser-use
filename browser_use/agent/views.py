@@ -119,6 +119,7 @@ class ActionResult(BaseModel):
 
 	# Deprecated
 	include_in_memory: bool = False  # whether to include in extracted_content inside long_term_memory
+	screenshot: str | None = None  # base64 encoded screenshot
 
 	@model_validator(mode='after')
 	def validate_success_requires_done(self):

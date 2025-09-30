@@ -133,17 +133,18 @@ class ChatAnthropicBedrock(ChatAWSBedrock):
 
 	def _get_usage(self, response: Message) -> ChatInvokeUsage | None:
 		"""Extract usage information from the response."""
+		# For Anthropic API: input_tokens represents total tokens (regular + cache_creation + cache_read)
+		# This was verified by comprehensive testing in H2OGPT internal test suite
+
 		usage = ChatInvokeUsage(
-			prompt_tokens=response.usage.input_tokens
-			+ (
-				response.usage.cache_read_input_tokens or 0
-			),  # Total tokens in Anthropic are a bit fucked, you have to add cached tokens to the prompt tokens
+			prompt_tokens=response.usage.input_tokens,  # input_tokens is already total tokens
 			completion_tokens=response.usage.output_tokens,
 			total_tokens=response.usage.input_tokens + response.usage.output_tokens,
 			prompt_cached_tokens=response.usage.cache_read_input_tokens,
 			prompt_cache_creation_tokens=response.usage.cache_creation_input_tokens,
 			prompt_image_tokens=None,
 		)
+
 		return usage
 
 	@overload

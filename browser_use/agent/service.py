@@ -3,6 +3,7 @@ import gc
 import inspect
 import json
 import logging
+import os
 import re
 import sys
 import tempfile
@@ -556,7 +557,8 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 				self.file_system = FileSystem.from_state(self.state.file_system_state)
 				# The parent directory of base_dir is the original file_system_path
 				self.file_system_path = str(self.file_system.base_dir)
-				logger.info(f'💾 File system restored from state to: {self.file_system_path}')
+				if os.getenv('H2OGPT_BROWSER_VERBOSE'):
+					logger.info(f'💾 File system restored from state to: {self.file_system_path}')
 				return
 			except Exception as e:
 				logger.error(f'💾 Failed to restore file system from state: {e}')
@@ -578,7 +580,8 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 		# Save file system state to agent state
 		self.state.file_system_state = self.file_system.get_state()
 
-		logger.info(f'💾 File system path: {self.file_system_path}')
+		if os.getenv('H2OGPT_BROWSER_VERBOSE'):
+			logger.info(f'💾 File system path: {self.file_system_path}')
 
 	def _set_screenshot_service(self) -> None:
 		"""Initialize screenshot service using agent directory"""
