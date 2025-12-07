@@ -186,6 +186,15 @@ class ChatOpenAI(BaseChatModel):
 				del model_params['temperature']
 				del model_params['frequency_penalty']
 
+			# Remove penalty parameters for Gemini models (not supported)
+			if 'gemini' in str(self.model).lower():
+				# Remove frequency_penalty if present
+				if 'frequency_penalty' in model_params:
+					del model_params['frequency_penalty']
+				# Remove other penalty parameters that Gemini doesn't support
+				if 'presence_penalty' in model_params:
+					del model_params['presence_penalty']
+
 			if output_format is None:
 				# Return string response
 				response = await self.get_client().chat.completions.create(
@@ -206,6 +215,16 @@ class ChatOpenAI(BaseChatModel):
 					'strict': True,
 					'schema': SchemaOptimizer.create_optimized_json_schema(output_format),
 				}
+
+				# Fix empty properties for Gemini compatibility (must be done after schema creation)
+				SchemaOptimizer._fix_empty_properties_for_gemini(response_format['schema'])
+
+				# DEBUG: Save schema to file for inspection
+				import json
+				import os
+				if 'BROWSER_USE_DEBUG_SCHEMA' in os.environ:
+					with open('/tmp/browser_use_schema_debug.json', 'w') as f:
+						json.dump(response_format['schema'], f, indent=2)
 
 				# Add JSON schema to system prompt if requested
 				if self.add_schema_to_system_prompt and openai_messages and openai_messages[0]['role'] == 'system':
