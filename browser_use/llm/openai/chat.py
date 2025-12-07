@@ -149,14 +149,26 @@ class ChatOpenAI(BaseChatModel):
 					'reasoning_effort': self.reasoning_effort,
 				}
 
+			# Prepare model parameters and remove unsupported parameters for Gemini
+			model_params: dict[str, Any] = {
+				'model': self.model,
+				'messages': openai_messages,
+				'temperature': self.temperature,
+			}
+			model_params.update(reasoning_effort_dict)
+
+			# Remove penalty parameters for Gemini models (not supported)
+			if 'gemini' in str(self.model).lower():
+				# Remove frequency_penalty if present
+				if 'frequency_penalty' in model_params:
+					del model_params['frequency_penalty']
+				# Remove other penalty parameters that Gemini doesn't support
+				if 'presence_penalty' in model_params:
+					del model_params['presence_penalty']
+
 			if output_format is None:
 				# Return string response
-				response = await self.get_client().chat.completions.create(
-					model=self.model,
-					messages=openai_messages,
-					temperature=self.temperature,
-					**reasoning_effort_dict,
-				)
+				response = await self.get_client().chat.completions.create(**model_params)
 
 				usage = self._get_usage(response)
 				return ChatInvokeCompletion(
@@ -171,14 +183,21 @@ class ChatOpenAI(BaseChatModel):
 					'schema': SchemaOptimizer.create_optimized_json_schema(output_format),
 				}
 
+				# Fix empty properties for Gemini compatibility (must be done after schema creation)
+				SchemaOptimizer._fix_empty_properties_for_gemini(response_format['schema'])
+
+				# DEBUG: Save schema to file for inspection
+				import json
+				import os
+				if 'BROWSER_USE_DEBUG_SCHEMA' in os.environ:
+					with open('/tmp/browser_use_schema_debug.json', 'w') as f:
+						json.dump(response_format['schema'], f, indent=2)
+
+				# Add response_format to model_params
+				model_params['response_format'] = ResponseFormatJSONSchema(json_schema=response_format, type='json_schema')
+
 				# Return structured response
-				response = await self.get_client().chat.completions.create(
-					model=self.model,
-					messages=openai_messages,
-					temperature=self.temperature,
-					response_format=ResponseFormatJSONSchema(json_schema=response_format, type='json_schema'),
-					**reasoning_effort_dict,
-				)
+				response = await self.get_client().chat.completions.create(**model_params)
 
 				if response.choices[0].message.content is None:
 					raise ModelProviderError(

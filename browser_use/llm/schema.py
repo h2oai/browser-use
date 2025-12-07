@@ -142,6 +142,46 @@ class SchemaOptimizer:
 		return optimized_schema
 
 	@staticmethod
+	def _fix_empty_properties_for_gemini(schema: dict[str, Any] | list[Any]) -> None:
+		"""
+		Fix empty properties objects that Gemini rejects.
+		Gemini requires that objects with type='object' MUST have a non-empty properties field.
+		For objects with missing or empty properties, we add a dummy flexible property.
+		"""
+		if isinstance(schema, dict):
+			# First recursively apply to all nested structures
+			for key, value in list(schema.items()):
+				if isinstance(value, (dict, list)):
+					SchemaOptimizer._fix_empty_properties_for_gemini(value)
+
+			# After recursion, fix empty/missing properties at this level
+			if schema.get('type') == 'object':
+				has_properties = 'properties' in schema
+				properties_empty = has_properties and isinstance(schema['properties'], dict) and len(schema['properties']) == 0
+				properties_missing = not has_properties
+
+				# Gemini rule: objects with type='object' MUST have a non-empty properties field
+				# If an object has no properties or empty properties, add a simple dummy property
+				if properties_empty or properties_missing:
+					# Add a simple string property as placeholder (no nested objects to avoid recursion)
+					schema['properties'] = {
+						'__gemini_placeholder__': {
+							'type': 'string',
+							'description': 'Placeholder for Gemini compatibility'
+						}
+					}
+					# Set additionalProperties: true to allow any other properties
+					schema['additionalProperties'] = True
+					# Remove required since the placeholder is optional
+					if 'required' in schema:
+						del schema['required']
+
+		elif isinstance(schema, list):
+			for item in schema:
+				if isinstance(item, (dict, list)):
+					SchemaOptimizer._fix_empty_properties_for_gemini(item)
+
+	@staticmethod
 	def _make_strict_compatible(schema: dict[str, Any] | list[Any]) -> None:
 		"""Ensure all properties are required for OpenAI strict mode"""
 		if isinstance(schema, dict):
